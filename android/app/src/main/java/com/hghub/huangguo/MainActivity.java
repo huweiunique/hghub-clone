@@ -46,11 +46,13 @@ import javax.net.ssl.SSLSocketFactory;
  * hls.min.js），打开先加载本地页面（秒开、弱网也能看到界面），
  * 列表/播放再联网拉；相对路径以 APP_URL 为 base，API 仍走服务器。
  * 播放走直连 CDN（默认）或 8080 代理（备用）。
- * 1.2.0.8 优选 IP：APP_URL 默认就是 https://hg.45678.eu.org/；
+ * 1.2.0.8 优选 IP：APP_URL 默认就是构建时注入的域名（BuildConfig.APP_URL）；
  * 首屏先拉 cf.090227.xyz 的优选 IP（有缓存直接用缓存秒开、后台刷新，
  * 没缓存最多等约 3 秒），再加载本地页面，这样首屏 /api/* 就能走优选 IP；
- * 拦截时用优选 IP 连 443、SNI 写 hg 域名（Cloudflare 证书校验正常），
+ * 拦截时用优选 IP 连 443、SNI 写该域名（Cloudflare 证书校验正常），
  * 并转发 Cookie、禁 gzip（Accept-Encoding: identity），失败回退默认节点。
+ * 优选域名取自 BuildConfig.APP_URL / FALLBACK_URL 的 host，不在代码里写死，
+ * 换服务器只需构建时换环境变量。
  */
 public class MainActivity extends Activity {
 
@@ -59,12 +61,24 @@ public class MainActivity extends Activity {
 
     private WebView webView;
     // 1.2.0.5 优选 IP：cf.090227.xyz 上别人测好的 CF 优选 IP。
-    // WebView 打开 hg.45678.eu.org 时，用优选 IP 建连、SNI 仍写 hg 域名，
+    // WebView 打开 APP_URL/FALLBACK_URL 的域名时，用优选 IP 建连、SNI 仍写该域名，
     // 这样既走最快节点、证书校验也正常；拉不到就走 Cloudflare 默认节点。
     private volatile String prefIp = null;
     private volatile boolean prefIpEnabled = true;
     private volatile boolean fellBack = false;
     private volatile String baseUrl = null;
+
+    /** 从 URL 取 host，解析失败返回 null。 */
+    private static String hostOf(String url) {
+        if (url == null || url.isEmpty()) return null;
+        try { return new URL(url).getHost(); } catch (Exception e) { return null; }
+    }
+
+    /** 是否为优选域名：构建时注入的 APP_URL / FALLBACK_URL 的 host。 */
+    private static boolean isPrefHost(String host) {
+        if (host == null || host.isEmpty()) return false;
+        return host.equals(hostOf(BuildConfig.APP_URL)) || host.equals(hostOf(BuildConfig.FALLBACK_URL));
+    }
     private FrameLayout fullscreenContainer;
     private View customView;
     private WebChromeClient.CustomViewCallback customViewCallback;
@@ -251,7 +265,7 @@ public class MainActivity extends Activity {
             @Override
             public void onReceivedHttpError(WebView view, WebResourceRequest request, WebResourceResponse errorResponse) {
                 super.onReceivedHttpError(view, request, errorResponse);
-                // hg 域名还没通（隧道未跑起来时会报 530）就回退到直连服务器地址
+                // 优选域名还没通（隧道未跑起来时会报 530）就回退到直连服务器地址
                 if (errorResponse != null && errorResponse.getStatusCode() >= 500) {
                     maybeFallback(view, request.getUrl() != null ? request.getUrl().toString() : "");
                 }
@@ -290,9 +304,9 @@ public class MainActivity extends Activity {
         });
     }
 
-    /** hg 域名打不开（5xx/网络错）时，回退到构建时注入的直连地址（仅一次）。 */
+    /** 优选域名打不开（5xx/网络错）时，回退到构建时注入的直连地址（仅一次）。 */
     private void maybeFallback(WebView view, String failedUrl) {
-        if (fellBack || failedUrl == null || !failedUrl.contains("hg.45678.eu.org")) return;
+        if (fellBack || failedUrl == null || !isPrefHost(hostOf(failedUrl))) return;
         String fb = BuildConfig.FALLBACK_URL;
         if (fb == null || fb.isEmpty()) return;
         fellBack = true;
@@ -306,7 +320,7 @@ public class MainActivity extends Activity {
 
     /** 后台拉 cf.090227.xyz 的优选 IP（别人测好的，不用自己测）。完成后（成功或失败）必调 onDone。 */
     private void fetchPrefIpAsync(final String url, final Runnable onDone) {
-        if (url == null || !url.contains("hg.45678.eu.org")) { // 直连地址不需要优选 IP
+        if (url == null || !isPrefHost(hostOf(url))) { // 非优选域名不需要优选 IP
             if (onDone != null) onDone.run();
             return;
         }
@@ -341,16 +355,16 @@ public class MainActivity extends Activity {
     }
 
     /**
-     * 优选 IP 拦截：只拦截 hg.45678.eu.org 的 GET 请求。
-     * 用优选 IP 连 443，TLS 的 SNI 写 hg 域名（证书校验正常），
-     * HTTP 请求头 Host 也写 hg 域名。失败返回 null 走 WebView 默认加载。
+     * 优选 IP 拦截：只拦截优选域名（APP_URL/FALLBACK_URL 的 host）的 GET 请求。
+     * 用优选 IP 连 443，TLS 的 SNI 写该域名（证书校验正常），
+     * HTTP 请求头 Host 也写该域名。失败返回 null 走 WebView 默认加载。
      */
     private WebResourceResponse fetchViaPrefIp(WebResourceRequest request) {
         try {
             if (!prefIpEnabled || prefIp == null || request == null) return null;
             if (!"GET".equalsIgnoreCase(request.getMethod())) return null;
             android.net.Uri u = request.getUrl();
-            if (u == null || !"hg.45678.eu.org".equals(u.getHost())) return null;
+            if (u == null || !isPrefHost(u.getHost())) return null;
             String host = u.getHost();
             String path = u.getEncodedPath() == null ? "/" : u.getEncodedPath();
             if (u.getEncodedQuery() != null) path += "?" + u.getEncodedQuery();
@@ -365,7 +379,7 @@ public class MainActivity extends Activity {
             hb.append("User-Agent: Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36\r\n");
             hb.append("Accept: */*\r\nAccept-Encoding: identity\r\nConnection: close\r\n");
             try {
-                String ck = CookieManager.getInstance().getCookie("https://hg.45678.eu.org");
+                String ck = CookieManager.getInstance().getCookie("https://" + host);
                 if (ck != null && !ck.isEmpty()) hb.append("Cookie: ").append(ck).append("\r\n");
             } catch (Exception ignored) {}
             hb.append("\r\n");
@@ -385,7 +399,7 @@ public class MainActivity extends Activity {
                     String vv = line.substring(i + 1).trim();
                     headers.put(k, vv);
                     if ("set-cookie".equals(k)) {
-                        try { CookieManager.getInstance().setCookie("https://hg.45678.eu.org", vv); } catch (Exception ignored) {}
+                        try { CookieManager.getInstance().setCookie("https://" + host, vv); } catch (Exception ignored) {}
                     }
                 }
             }

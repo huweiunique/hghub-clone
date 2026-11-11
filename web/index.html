@@ -333,7 +333,7 @@ if (typeof window !== 'undefined' && !window._alignShareBound){
   window.addEventListener('resize', function(){ setTimeout(alignShare, 120); });
 }
 var APP_VERSION = '1.2.0.8';
-var SHARE_BASE = 'https://hg.45678.eu.org/';
+var SHARE_BASE = 'https://sp1.45678.eu.org/';
 /* 1.2.0.6：分享面板里的“下载 App”地址。发新版时只改这一处常量 + 各处版本号。 */
 var APK_RELEASE_URL = 'https://github.com/vps1986/hghub-clone/releases/download/v1.2.0.8/HGhub-1.2.0.8.apk';
 var $ = function(s){ return document.querySelector(s); };
@@ -1277,7 +1277,7 @@ async function postComment(){
   toast(posted ? '评论已发布' : '已保存到本地（上游未接受）');
   loadComments(id);
 }
-/* 1.2.0.4 分享：链接格式 https://hg.45678.eu.org/?v=<id>&ep=<集数>，点开直接播对应集；
+/* 1.2.0.4 分享：链接格式 https://sp1.45678.eu.org/?v=<id>&ep=<集数>，点开直接播对应集；
    面板里有复制链接、微信/QQ（复制链接后去对应 App 粘贴）、系统分享和下载 App 入口。 */
 function openShare(id, ep){
   var v = findVideo(id);
