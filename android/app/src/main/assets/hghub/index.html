@@ -1,0 +1,1585 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>HGhub · 短剧</title>
+<script src="/hls.min.js"></script>
+<script>if(!window.Hls){var _h=document.createElement("script");_h.src="https://cdn.jsdelivr.net/npm/hls.js@1/dist/hls.min.js";document.head.appendChild(_h);}</script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--bg:#0e0e11;--card:#1a1a1f;--card2:#22222a;--text:#f5f5f5;--muted:#9a9aa3;--line:#2a2a32;--accent:#ff2d55;--accent2:#ff6b81;--topbar-h:58px;--bottomnav-h:64px;--page-shift:14px} /* 1.2.0.8：整体下移，顶部留出间距 */
+html,body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"PingFang SC","Microsoft YaHei",sans-serif}
+/* 1.2.0.7：feed 标题/简介/右侧栏被播放中的视频盖住的根因——video.bgvid z-index:1，高于无 z-index 的 .shade/.info/.acts；底部导航点了没反应的根因——#view-home 的 display:flex 盖过 section[hidden]，首页永远藏不住。两处都在本版修好，见 [hidden] 兜底与 .slide 的 z-index。
+   1.2.0.6 控制中心位置修复：顶栏以前是 sticky——在竖屏 feed（内部滚动容器）里
+   和 WebView 里都可能被滚走/顶到奇怪位置。改成 fixed，永远贴在顶部。
+   首页 feed 上顶栏用黑渐变盖在视频上（抖音式），其他页用实底色。 */
+header{position:fixed;top:var(--page-shift);left:0;right:0;height:var(--topbar-h); /* 1.2.0.8+：顶栏高度写死 58px，内容 padding-top 72px 正好顶到顶栏底边，滚动时内容再也不会跑到顶栏上面 */z-index:90;background:#0e0e11;border-bottom:1px solid var(--line);padding:10px 12px}
+/* 1.2.0.8+：删掉首页顶栏的透明渐变——以前首页顶栏是半透明渐变，滚上去的内容会从顶栏后面透出来/露出来；现在所有页面顶栏一律纯黑不透明。 */
+body.modal-open{overflow:hidden}
+body.modal-open header{display:none}
+.topbar{display:flex;align-items:center;gap:10px}
+.logo{font-size:21px;font-weight:900;letter-spacing:.5px;color:#fff;white-space:nowrap;cursor:pointer;background:none;border:0;padding:0;font-family:inherit} /* 1.2.0.8：logo 可点击回首页；字号随其他图标同比例缩小 */
+.logo b{color:var(--accent)}
+.search{flex:1;display:flex;gap:6px}
+.search input{flex:1;min-width:0;background:var(--card);border:1px solid var(--line);border-radius:999px;color:var(--text);padding:8px 14px;font-size:14px;outline:none}
+.search button{touch-action:manipulation;background:var(--accent);color:#fff;border:0;border-radius:999px;padding:8px 14px;font-size:14px;cursor:pointer}
+/* 1.2.0.6 底部导航（控制中心）加固：fixed bottom + z-index 90，高于播放弹窗
+   （.modal z-60）和评论/分享面板（.sheet z-80），所以播放时、详情页里、评论
+   面板打开时都始终贴在底部可见，不会被内容盖住、不会跑到顶部、不会随滚动消失。
+   顶栏和底栏的高度用 --topbar-h / --bottomnav-h 统一，feed 和弹窗的留白都按它算。 */
+.bottomnav{position:fixed;left:0;right:0;bottom:0;z-index:90;visibility:visible;pointer-events:auto;display:flex;background:rgba(14,14,17,.97);border-top:1px solid var(--line);padding:6px 4px calc(6px + env(safe-area-inset-bottom))}
+.bottomnav button{touch-action:manipulation;flex:1;background:none;border:0;color:var(--muted);font-size:12px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px;padding:4px 0}
+.bottomnav button .ic{font-size:18px;line-height:1} /* 1.2.0.8：图标同比例缩小 */
+/* 1.2.0.8+ 抖音风图标：白色描边线条 SVG（stroke=currentColor），不用 emoji。尺寸沿用 1.2.0.8 缩小后的大小。
+   1.2.0.8+ 大星星根因：ic() 生成的 svg class 是 ic-svg，但下面所有行内尺寸规则都写成了已不存在的 ic-inline，
+   导致按钮外的星星/气泡 SVG 全是无宽高状态——浏览器默认 300×150，display:block 时还会撑满容器宽度，
+   卡片/榜单里就变成占满卡片的巨星，feed 简介行的星星也一样巨大并把“13.2万”挤到下一行。
+   修：ic-svg 默认写死 14px（按钮里的大尺寸规则优先级更高，不受影响），再把下面所有 ic-inline 改回 ic-svg。 */
+.ic-svg{display:block;width:14px;height:14px;vertical-align:-2px}
+.bottomnav .ic svg{width:18px;height:18px}
+.slide .acts button svg{width:19px;height:19px;margin:0 auto}
+.slide .acts span svg.ic-svg{width:11px;height:11px;vertical-align:-1px}
+.detail-rail button svg{width:17px;height:17px;margin:0 auto}
+.detail-rail span svg.ic-svg{width:11px;height:11px;vertical-align:-1px}
+.sharegrid button .ic svg{width:19px;height:19px;margin:0 auto}
+.mutebtn svg{width:15px;height:15px;margin:0 auto}
+.close svg{width:14px;height:14px;margin:0 auto}
+.search button svg{width:14px;height:14px;vertical-align:-2px;margin-right:2px}
+.btn svg.ic-svg{width:14px;height:14px;vertical-align:-2px;margin-right:2px}
+.meta svg.ic-svg,.detail-stats svg.ic-svg,.card .t p svg.ic-svg,.rankrow p svg.ic-svg,.post .meta svg.ic-svg{width:12px;height:12px;vertical-align:-1px} /* 1.2.0.8+：ic-inline 已不存在，改回 ic-svg，并补上卡片/榜单/帖子里的行内星星尺寸 */
+.acts button.faved,.detail-rail button.faved{color:#ffcf3d}
+.bottomnav button.on{color:var(--accent);font-weight:700}
+main{padding:calc(var(--topbar-h) + var(--page-shift)) 0 calc(var(--bottomnav-h) + 10px); /* 1.2.0.8：内容随顶栏整体下移 */max-width:1100px;margin:0 auto}
+#view-cat,#view-rank,#view-posts,#view-me,#view-search{padding:0 12px}
+/* 1.2.0.6 抖音式竖屏全屏 feed：卡片占满顶栏与底栏之间的整块区域，不再留白、
+   不再圆角、卡片之间不再留缝；首页的提示行删掉（不是抖音的样式，浪费一屏高度）。 */
+#view-home{display:flex;flex-direction:column;height:calc(100vh - var(--topbar-h) - var(--page-shift) - var(--bottomnav-h));height:calc(100dvh - var(--topbar-h) - var(--page-shift) - var(--bottomnav-h))} /* 1.2.0.8：feed 高度随整体下移同步扣掉间距 */
+section[hidden]{display:none}
+[hidden]{display:none !important} /* 1.2.0.7 根因：#view-home 的 ID 选择器 display:flex 优先级高于 section[hidden]，首页 section 设了 hidden 也藏不住，点底部导航切页后首页还盖在上面，看起来像点了没反应。全局 !important 兜底，弹窗/面板的 hidden 也一样。 */
+.hint{color:var(--muted);font-size:13px;margin:8px 2px}
+.feed{position:relative;flex:1;min-height:0;overflow-y:auto;scroll-snap-type:y mandatory;scroll-behavior:smooth;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;border-radius:0;background:transparent}
+.slide{position:relative;height:100%;margin:0;scroll-snap-align:start;scroll-snap-stop:always;overflow:hidden;cursor:pointer;border-radius:0;background:linear-gradient(160deg,#2b2b35,#141419 60%,#20202a);box-shadow:none;will-change:transform,opacity;transition:opacity .25s ease,transform .25s ease;opacity:.6;transform:scale(.985)}
+.slide.active{opacity:1;transform:scale(1)}
+.slide img.cover{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background:#1c1c22;z-index:0}
+.slide .shade{position:absolute;inset:0;z-index:2;background:linear-gradient(180deg,rgba(0,0,0,.15) 0%,transparent 40%,transparent 55%,rgba(0,0,0,.88) 100%)} /* 1.2.0.7：video.bgvid 是 z-index:1，没有 z-index 的 .shade/.info/.acts 会被播起来的视频盖住，标题/简介/右侧栏全看不见（只有 z-4 的静音键可见）。全部抬到视频上面。 */
+.slide .info{position:absolute;left:0;right:72px;bottom:12px;padding:18px 14px;z-index:3}
+.slide .info h3{font-size:19px;line-height:1.35;margin-bottom:6px}
+.slide .info p{color:#d8d8de;font-size:13px;line-height:1.5;display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden}
+.slide .info p.syn{cursor:pointer}
+.slide .info p.syn.expanded{display:block;-webkit-line-clamp:unset} /* 1.2.0.7：feed 卡片默认只显示一行简介，点简介展开完整文案 */
+.slide .watchall{touch-action:manipulation;margin-top:10px;background:linear-gradient(135deg,#ffcf3d,#ffb800);color:#221a00;border:0;border-radius:999px;padding:9px 18px;font-size:14px;font-weight:800;cursor:pointer;box-shadow:0 2px 10px rgba(0,0,0,.45)} /* 1.2.0.7：feed 卡片上的“看全集”黄按钮，和预览详情页的黄色按钮同款 */
+.slide .meta{color:var(--muted);font-size:12px;margin-top:8px}
+.slide .acts{position:absolute;right:10px;bottom:26px; /* 1.2.0.8+ 分享/看全集对齐：分享按钮下“分享”文字已删，分享按钮成了右侧栏最后一项，其中心距 .acts 底部 = 按钮半高 22px；看全集按钮中心距 slide 底部约 47.5px（.info bottom 12 + padding 18 + 按钮半高 ~17.5）；26 + 22 ≈ 47.5，两中心齐平（真机字体度量有偏差时 alignShare() 再用实测 rect 微调） */display:flex;flex-direction:column;gap:16px;align-items:center;z-index:3}
+.slide .acts button{width:44px;height:44px;border-radius:50%;border:1px solid rgba(255,255,255,.35);background:rgba(0,0,0,.45);color:#fff;font-size:19px;cursor:pointer} /* 1.2.0.8：右侧栏图标同比例缩小 */
+.slide .acts button.liked{color:var(--accent);border-color:var(--accent)}
+.slide .acts span{font-size:12px;color:#fff;text-align:center;margin-top:-10px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden;cursor:pointer}
+.card img{width:100%;aspect-ratio:3/4;object-fit:cover;display:block;background:#222}
+.card .t{padding:8px 10px}
+.card .t h4{font-size:14px;line-height:1.35;height:38px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.card .t p{color:var(--muted);font-size:12px;margin-top:4px}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0}
+.chip{touch-action:manipulation;background:var(--card);border:1px solid var(--line);color:#ddd;border-radius:999px;padding:7px 13px;font-size:13px;cursor:pointer}
+.chip.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.rankrow{display:flex;gap:12px;align-items:center;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px;margin-bottom:10px;cursor:pointer}
+.rankrow .no{font-size:20px;font-weight:900;width:30px;text-align:center;color:var(--accent)}
+.rankrow img{width:64px;height:86px;object-fit:cover;border-radius:8px}
+.rankrow h4{font-size:15px;line-height:1.4}
+.rankrow p{color:var(--muted);font-size:12px;margin-top:4px}
+.post{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:12px;cursor:pointer}
+.post h4{font-size:15px;line-height:1.5}
+.post p{color:#cfcfd6;font-size:13px;line-height:1.6;margin-top:6px;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.post .meta{color:var(--muted);font-size:12px;margin-top:8px}
+.mebox{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:14px}
+.mebox h3{font-size:16px;margin-bottom:10px}
+.mebox input,.mebox select{width:100%;background:var(--card2);border:1px solid var(--line);border-radius:8px;color:var(--text);padding:10px;font-size:14px;margin:6px 0;outline:none}
+.btn{background:linear-gradient(135deg,#ff2d55,#ff7a59);color:#fff;border:0;border-radius:10px;padding:10px 16px;font-size:14px;cursor:pointer}
+.btn.ghost{background:var(--card2);border:1px solid var(--line);color:#ddd}
+.btn.watchall{background:linear-gradient(135deg,#ffcf3d,#ffb800);color:#221a00} /* 1.2.0.7：详情页“看全集”黄色按钮（照预览图2） */
+.score-badge{display:inline-block;background:#f5c518;color:#111;border-radius:6px;padding:2px 8px;font-weight:800;font-size:13px;margin-right:6px}
+.detail-rail{position:absolute;right:10px;bottom:12px;display:flex;flex-direction:column;gap:14px;align-items:center;z-index:2}
+.detail-rail button{width:41px;height:41px;border-radius:50%;border:1px solid rgba(255,255,255,.35);background:rgba(0,0,0,.55);color:#fff;font-size:17px;cursor:pointer} /* 1.2.0.8：详情右侧栏图标同比例缩小 */
+.detail-rail button.liked{color:var(--accent);border-color:var(--accent)}
+.detail-rail span{font-size:12px;color:#fff;text-align:center;margin-top:-10px;text-shadow:0 1px 4px rgba(0,0,0,.8)}
+.rowbtns{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+/* 1.2.0.6：弹窗 z-60 低于底栏 z-90，所以详情/播放打开时底栏仍压在弹窗上面、
+   始终可见；弹窗底部留白按底栏高度算，不会被底栏盖住内容。顶栏在弹窗打开时
+   由 body.modal-open 隐藏，详情页顶部改用自己的“‹ 返回”按钮（抖音式）。 */
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.94);z-index:60;overflow-y:auto;padding:12px 12px calc(var(--bottomnav-h) + 20px)}
+.modal .box{max-width:900px;margin:0 auto}
+.modal video{width:100%;max-height:62vh;background:#000;border-radius:12px}
+.modal .close{position:sticky;top:6px;float:right;z-index:2;background:rgba(0,0,0,.6);color:#fff;border:1px solid #555;border-radius:50%;width:33px;height:33px;font-size:16px;cursor:pointer} /* 1.2.0.8：关闭图标同比例缩小 */
+.modal h2{font-size:19px;line-height:1.4;margin:12px 0 6px}
+.modal .desc{color:#cfcfd6;font-size:13px;line-height:1.7;white-space:pre-wrap}
+.modal .eps{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}
+.detail-cover{position:relative;width:100%;max-width:420px;margin:0 auto;border-radius:16px;overflow:hidden;cursor:pointer;min-height:200px;background:linear-gradient(160deg,#2b2b35,#141419)} /* 1.2.0.7：封面加载中/失败时也不是纯黑，有渐变底 + 占位图兜底 */
+.detail-cover img{width:100%;aspect-ratio:3/4;object-fit:cover;display:block;background:#222}
+.detail-stats{display:flex;gap:16px;flex-wrap:wrap;color:#d8d8de;font-size:14px;margin:10px 0}
+.detail-stats b{color:#fff}
+.detail-tags{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0}
+.desc.clamped{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.ep-range{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}
+.ep-range button{background:var(--card2);border:1px solid var(--line);color:#ddd;border-radius:999px;padding:6px 12px;font-size:13px;cursor:pointer}
+.ep-range button.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.modal .eps button.watched{border-color:#3a7d4f;color:#9ed6a8}
+.modal .eps button.watched::after{content:' ✓'}
+.detail-play{width:100%;padding:13px;font-size:16px;margin:12px 0}
+.backlink{background:none;border:0;color:#ddd;font-size:14px;cursor:pointer;padding:8px 0}
+/* 1.2.0.6 详情页顶部返回（抖音式）：弹窗打开时顶栏已隐藏，详情页自己带返回按钮。 */
+.detailback{position:sticky;top:0;z-index:3;display:inline-block;background:rgba(0,0,0,.65);border:1px solid #444;border-radius:999px;padding:8px 16px;margin-bottom:8px}
+.modal .eps button{background:var(--card2);border:1px solid var(--line);color:#eee;border-radius:8px;padding:8px 12px;font-size:13px;cursor:pointer}
+.modal .eps button.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.ctl{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:10px 0}
+.ctl select{background:var(--card2);border:1px solid var(--line);color:#eee;border-radius:8px;padding:8px;font-size:13px}
+.empty{color:var(--muted);text-align:center;padding:36px 0;font-size:14px}
+#toast{position:fixed;left:50%;bottom:84px;transform:translateX(-50%);background:#222;border:1px solid var(--line);color:#fff;padding:10px 18px;border-radius:999px;font-size:14px;z-index:99;display:none}
+footer{color:var(--muted);font-size:12px;text-align:center;padding:18px 0 calc(var(--bottomnav-h) + 18px)}
+@media (max-width:640px){.slide .info h3{font-size:17px}}
+/* 1.2.0.6：改回抖音式全屏 feed（1.2.0.4 曾改成卡片不占满屏，用户要求照抖音做，
+   已改回）。顶栏（logo+搜索）fixed 在顶部、底栏 fixed 在底部，始终保留，播放时也不隐藏；
+   feed 卡片占满顶栏与底栏之间的整块区域，无留白、无圆角、无间距。 */
+body[data-view="home"] footer{display:none}
+.heartpop{position:absolute;left:50%;top:42%;transform:translate(-50%,-50%);font-size:80px;color:#ff2d55;pointer-events:none;animation:pop .7s ease forwards;z-index:5} /* 1.2.0.8+：双击点赞红心动画上限 80px，只在双击时闪 0.7 秒，正常播放时画面中间不出现大图标 */
+@keyframes pop{0%{transform:translate(-50%,-50%) scale(.4);opacity:0}30%{transform:translate(-50%,-50%) scale(1.2);opacity:1}100%{transform:translate(-50%,-50%) scale(1) translateY(-30px);opacity:0}}
+.slide video.bgvid{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background:transparent;z-index:1}
+.slide .centerflash{position:absolute;left:50%;top:42%;transform:translate(-50%,-50%);font-size:64px;color:rgba(255,255,255,.9);text-shadow:0 2px 12px rgba(0,0,0,.6);pointer-events:none;z-index:4;opacity:0}
+.slide .centerflash.flashshow{animation:flashfade .7s ease forwards}
+@keyframes flashfade{0%{opacity:0}25%{opacity:1}100%{opacity:0}}
+.slide .mutebtn{position:absolute;top:12px;right:12px;z-index:4;width:31px;height:31px;border-radius:50%;border:1px solid rgba(255,255,255,.35);background:rgba(0,0,0,.45);color:#fff;font-size:15px;cursor:pointer} /* 1.2.0.8：静音图标同比例缩小 */
+.slide .prog{position:absolute;left:0;right:0;bottom:0;height:4px;background:rgba(255,255,255,.25);z-index:4;cursor:pointer}
+.slide .progfill{height:100%;width:0%;background:var(--accent)}
+.feedsentinel{height:8px;scroll-snap-align:start}
+.feedretry{display:flex;align-items:center;justify-content:center;min-height:120px;margin:12px;border-radius:16px;background:var(--card);border:1px solid var(--line);color:#fff;font-size:14px;cursor:pointer;scroll-snap-align:start}
+.newbanner{position:sticky;top:calc(var(--topbar-h) + var(--page-shift)); /* 1.2.0.8+：以前 top:0，会贴到屏幕最顶上、跑到顶栏上面去；现在顶到顶栏底边 */z-index:40;margin:8px auto;text-align:center;background:var(--accent);color:#fff;border-radius:999px;padding:8px 16px;font-size:14px;cursor:pointer;max-width:320px}
+.feedend{display:flex;align-items:center;justify-content:center;height:40%;color:var(--muted);font-size:14px;scroll-snap-align:start}
+/* 1.2.0.6：评论/分享面板 z-80 低于底栏 z-90，底栏始终可见；面板底部留白按
+   底栏高度算，评论输入框不再被底栏盖住。 */
+.sheet{position:fixed;left:0;right:0;bottom:0;z-index:80;max-height:72dvh;background:#1a1a1f;border-top:1px solid var(--line);border-radius:20px 20px 0 0;padding:14px 14px calc(var(--bottomnav-h) + 20px + env(safe-area-inset-bottom));overflow-y:auto;box-shadow:0 -8px 30px rgba(0,0,0,.6)}
+.sheet h3{font-size:16px;margin-bottom:10px}
+.sheet .close{float:right;background:var(--card2);border:1px solid var(--line);color:#fff;border-radius:50%;width:28px;height:28px;font-size:14px;cursor:pointer} /* 1.2.0.8：面板关闭图标同比例缩小 */
+.comment{display:flex;gap:10px;padding:10px 0;border-bottom:1px solid var(--line)}
+.comment .cav{width:34px;height:34px;border-radius:50%;background:#33333d;color:#fff;display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0}
+.comment .cbody{flex:1;min-width:0}
+.comment .cbody b{font-size:14px}
+.comment .cbody p{font-size:14px;line-height:1.6;margin-top:2px;word-break:break-word}
+.cmeta{color:var(--muted);font-size:12px}
+.commentbar{display:flex;gap:8px;margin-top:12px}
+.commentbar input{flex:1;min-width:0;background:var(--card2);border:1px solid var(--line);border-radius:999px;color:var(--text);padding:10px 14px;font-size:14px;outline:none}
+.sharegrid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:12px 0}
+.sharegrid button{background:var(--card2);border:1px solid var(--line);border-radius:12px;color:#eee;padding:12px 4px;font-size:13px;cursor:pointer}
+.sharegrid button .ic{font-size:19px;display:block;margin-bottom:4px} /* 1.2.0.8：分享图标同比例缩小 */
+.sharelink{background:var(--card2);border:1px solid var(--line);border-radius:8px;padding:10px;font-size:13px;word-break:break-all;color:#cfcfd6}
+</style>
+</head>
+<body data-view="home">
+<header>
+  <div class="topbar">
+    <button type="button" class="logo" id="btnLogoHome" title="返回首页">HG<b>hub</b></button> <!-- 1.2.0.8：顶部 logo 可点击，直接返回首页 -->
+    <div class="search"><input id="q" placeholder="搜索短剧、作者、标签..." enterkeyhint="search"><button type="button" id="btnSearch" onclick="doSearch(document.getElementById('q').value)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20.5 20.5L16.5 16.5"/></svg>搜索</button></div>
+  </div>
+</header>
+<main>
+  <section id="view-home">
+    <div id="newBanner" class="newbanner" hidden>有新更新，点击查看</div>
+    <div class="feed" id="feed"><div class="empty">加载中...</div></div>
+  </section>
+  <section id="view-cat" hidden>
+    <div class="chips" id="catChips"><span class="hint">加载分类中...</span></div>
+    <p class="hint" id="catTotal"></p>
+    <div class="grid" id="catGrid"></div>
+    <div id="catEnd" class="empty" hidden>已加载全部</div>
+  </section>
+  <section id="view-rank" hidden>
+    <div class="chips" id="rankTabs">
+      <button class="chip on" data-type="hot">热度榜</button>
+      <button class="chip" data-type="like">点赞榜</button>
+      <button class="chip" data-type="view">播放榜</button>
+      <button class="chip" data-type="weekly">周榜</button>
+      <button class="chip" data-type="monthly">月榜</button>
+    </div>
+    <div id="rankList"></div>
+    <p class="hint">榜单仅展示前 20 名（上游接口只返回前 20，无法翻页）</p>
+  </section>
+  <section id="view-posts" hidden>
+    <div id="postList"><div class="empty">加载中...</div></div>
+    <div id="postEnd" class="empty" hidden>已加载全部</div>
+  </section>
+  <section id="view-me" hidden>
+    <div id="meBox"></div>
+  </section>
+  <section id="view-search" hidden>
+    <div class="chips" id="hotTags"></div>
+    <p class="hint" id="searchTotal"></p>
+    <div class="grid" id="searchGrid"></div>
+    <div id="searchEnd" class="empty" hidden>已加载全部</div>
+    <div id="searchEmpty" class="empty" hidden>未找到相关内容，换个关键词试试</div>
+  </section>
+</main>
+<nav class="bottomnav" id="bottomNav">
+  <button type="button" data-view="home" class="on" onclick="showView('home')"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 9.5 12 3l9 6.5"/><path d="M5.5 9.5V20a1 1 0 0 0 1 1H10v-5.5h4V21h3.5a1 1 0 0 0 1-1V9.5"/></svg></span>首页</button>
+  <button type="button" data-view="cat" onclick="showView('cat')"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/></svg></span>分类</button>
+  <button type="button" data-view="rank" onclick="showView('rank')"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4h10v5a5 5 0 0 1-10 0V4z"/><path d="M7 5.5H4.8a2.7 2.7 0 0 0 2.7 4.6"/><path d="M17 5.5h2.2a2.7 2.7 0 0 1-2.7 4.6"/><path d="M12 14v3.5"/><path d="M8.5 20.5h7"/></svg></span>榜单</button>
+<!-- 1.2.0.8：底部导航删掉“帖子”，只剩 首页/分类/榜单/我的 4 项 -->  <button type="button" data-view="me" onclick="showView('me')"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="7.5" r="3.8"/><path d="M4.8 20.5a7.2 7.2 0 0 1 14.4 0"/></svg></span>我的</button>
+</nav>
+<footer>HGhub · 短剧 · 复刻版 1.2.0.8 · 全部 3361 部无限滚动 · 自动播放 · 每 10 分钟自动检查更新</footer>
+<div class="modal" id="player" hidden>
+  <div class="box">
+    <button class="close" id="btnClosePlayer"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    <div id="detailPane">
+      <button class="backlink detailback" id="btnBackFeed" type="button">‹ 返回</button>
+      <div class="detail-cover" id="dCover"><img id="dCoverImg" src="" alt="" onerror="coverErr(this)"><div class="detail-rail"><!-- 1.2.0.8：详情右侧栏点赞爱心按钮移除 --><button type="button" id="dRailComment"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg></button><span id="dRailCommentN"></span><button type="button" id="dRailFav"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2.8l2.9 5.9 6.5.9-4.7 4.6 1.1 6.5L12 17.6l-5.8 3.1 1.1-6.5L2.6 9.6l6.5-.9L12 2.8z"/></svg></button><span id="dRailFavN"></span><button type="button" id="dRailShare"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 14 20 9 15 4"/><path d="M4 20v-7a4 4 0 0 1 4-4h12"/></svg></button></div></div>
+      <h2 id="pTitle"></h2>
+      <p class="hint" id="pMeta"></p>
+      <div class="detail-stats" id="dStats"></div>
+      <p class="desc clamped" id="pDesc"></p>
+      <button class="btn ghost" id="btnMoreDesc" type="button">展开介绍</button>
+      <div class="detail-tags" id="dTags"></div>
+      <div class="rowbtns">
+        <!-- 1.2.0.8：详情页“♥ 点赞”按钮移除（双击点赞手势保留） -->
+        <button class="btn ghost" id="btnDFav" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2.8l2.9 5.9 6.5.9-4.7 4.6 1.1 6.5L12 17.6l-5.8 3.1 1.1-6.5L2.6 9.6l6.5-.9L12 2.8z"/></svg> 收藏</button>
+        <button class="btn ghost" id="btnDShare" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 14 20 9 15 4"/><path d="M4 20v-7a4 4 0 0 1 4-4h12"/></svg> 分享</button>
+        <button class="btn ghost" id="btnDComment" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg> 评论</button>
+      </div>
+      <button class="btn detail-play watchall" id="btnPlayDetail" type="button">▶ 看全集</button>
+      <h3 style="font-size:16px;margin:6px 0">选集 <span class="hint" id="dEpTotal"></span></h3>
+      <div class="ep-range" id="dEpRanges"></div>
+      <div class="eps" id="pEps"></div>
+    </div>
+    <div id="playerPane" hidden>
+    <button class="backlink" id="btnBackDetail" type="button">‹ 返回详情</button>
+    <video id="video" controls playsinline preload="auto"></video>
+    <div class="ctl">
+      <select id="speedSel" title="倍速">
+        <option value="0.5">0.5x</option><option value="0.75">0.75x</option>
+        <option value="1" selected>1x</option><option value="1.25">1.25x</option>
+        <option value="1.5">1.5x</option><option value="2">2x</option>
+      </select>
+      <select id="streamSel" title="线路画质">
+        <option value="main" selected>主线</option><option value="hevc">高清 HEVC</option><option value="preview">预览</option>
+      </select>
+      <!-- 1.2.0.8：播放页“♥ 点赞”按钮移除（双击点赞手势保留） -->
+      <button class="btn ghost" id="btnFav"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2.8l2.9 5.9 6.5.9-4.7 4.6 1.1 6.5L12 17.6l-5.8 3.1 1.1-6.5L2.6 9.6l6.5-.9L12 2.8z"/></svg> 收藏</button>
+      <button class="btn ghost" id="btnShare"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 14 20 9 15 4"/><path d="M4 20v-7a4 4 0 0 1 4-4h12"/></svg> 分享</button>
+      <button class="btn ghost" id="btnPrevEp">上一集</button>
+      <button class="btn ghost" id="btnNextEp">下一集</button>
+    </div>
+    </div>
+  </div>
+</div>
+<div class="sheet" id="commentSheet" hidden>
+  <button class="close" id="btnCloseComments"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+  <h3 id="commentTitle">评论</h3>
+  <div id="commentList"><div class="empty">加载评论中...</div></div>
+  <div class="commentbar"><input id="commentInput" placeholder="发一条友善的评论..." enterkeyhint="send"><button class="btn" id="btnSendComment">发送</button></div>
+</div>
+<div class="sheet" id="shareSheet" hidden>
+  <button class="close" id="btnCloseShare"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+  <h3 id="shareTitle">分享</h3>
+  <div class="sharelink" id="shareLink"></div>
+  <div class="sharegrid">
+    <button id="btnCopyLink"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13.5a5 5 0 0 0 7.5.5l2.5-2.5a5 5 0 0 0-7-7l-1.5 1.5"/><path d="M14 10.5a5 5 0 0 0-7.5-.5L4 12.5a5 5 0 0 0 7 7l1.5-1.5"/></svg></span>复制链接</button>
+    <button id="btnShareWechat"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg></span>微信</button>
+    <button id="btnShareQQ"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4.5" width="18" height="13" rx="3.5"/><circle cx="8.5" cy="11" r="1.1" fill="currentColor" stroke="none"/><circle cx="12" cy="11" r="1.1" fill="currentColor" stroke="none"/><circle cx="15.5" cy="11" r="1.1" fill="currentColor" stroke="none"/></svg></span>QQ</button>
+    <button id="btnSysShare"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 14 20 9 15 4"/><path d="M4 20v-7a4 4 0 0 1 4-4h12"/></svg></span>系统分享</button>
+  </div>
+  <button class="btn" id="btnDownloadApp" style="width:100%"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v11"/><path d="M6.5 9.5L12 15l5.5-5.5"/><path d="M4 20.5h16"/></svg> 下载 App（HGhub 1.2.0.8）</button>
+  <p class="hint" style="margin-top:8px">别人点开分享链接，会直接打开对应剧集开始播。</p>
+</div>
+<div id="toast"></div>
+<script>
+var UP = 'https://huangguoai.com';
+/* 1.2.0.8+ 抖音风图标：白色描边线条 SVG，stroke=currentColor；filled=true 时实心（收藏已选）。 */
+var ICONS = {
+  home: '<path d="M3 9.5 12 3l9 6.5"/><path d="M5.5 9.5V20a1 1 0 0 0 1 1H10v-5.5h4V21h3.5a1 1 0 0 0 1-1V9.5"/>',
+  grid: '<rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/>',
+  trophy: '<path d="M7 4h10v5a5 5 0 0 1-10 0V4z"/><path d="M7 5.5H4.8a2.7 2.7 0 0 0 2.7 4.6"/><path d="M17 5.5h2.2a2.7 2.7 0 0 1-2.7 4.6"/><path d="M12 14v3.5"/><path d="M8.5 20.5h7"/>',
+  user: '<circle cx="12" cy="7.5" r="3.8"/><path d="M4.8 20.5a7.2 7.2 0 0 1 14.4 0"/>',
+  comment: '<path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>',
+  star: '<path d="M12 2.8l2.9 5.9 6.5.9-4.7 4.6 1.1 6.5L12 17.6l-5.8 3.1 1.1-6.5L2.6 9.6l6.5-.9L12 2.8z"/>',
+  share: '<polyline points="15 14 20 9 15 4"/><path d="M4 20v-7a4 4 0 0 1 4-4h12"/>',
+  vol: '<path d="M11 5 6.5 9H3v6h3.5L11 19V5z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.4 5.6a9 9 0 0 1 0 12.8"/>',
+  volx: '<path d="M11 5 6.5 9H3v6h3.5L11 19V5z"/><path d="M16 9.5l5 5M21 9.5l-5 5"/>',
+  close: '<path d="M6 6l12 12M18 6L6 18"/>',
+  search: '<circle cx="11" cy="11" r="7"/><path d="M20.5 20.5L16.5 16.5"/>',
+  link: '<path d="M10 13.5a5 5 0 0 0 7.5.5l2.5-2.5a5 5 0 0 0-7-7l-1.5 1.5"/><path d="M14 10.5a5 5 0 0 0-7.5-.5L4 12.5a5 5 0 0 0 7 7l1.5-1.5"/>',
+  dots: '<rect x="3" y="4.5" width="18" height="13" rx="3.5"/><circle cx="8.5" cy="11" r="1.1" fill="currentColor" stroke="none"/><circle cx="12" cy="11" r="1.1" fill="currentColor" stroke="none"/><circle cx="15.5" cy="11" r="1.1" fill="currentColor" stroke="none"/>',
+  download: '<path d="M12 3v11"/><path d="M6.5 9.5L12 15l5.5-5.5"/><path d="M4 20.5h16"/>'
+};
+function ic(name, filled){
+  return '<svg class="ic-svg" width="14" height="14" viewBox="0 0 24 24" fill="' + (filled ? 'currentColor' : 'none') + '" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + ICONS[name] + '</svg>'; /* 1.2.0.8+：写死 width/height=14，就算哪处 CSS 尺寸规则漏了，图标也不会再放大到 300px */
+}
+/* 1.2.0.8+ 分享/看全集对齐微调：CSS 已按几何尺寸算好（.acts bottom 21px），真机字体度量有偏差时用实测 rect 再对齐一次；jsdom 无布局时 rect 为 0，直接跳过。 */
+function alignShare(){
+  var slides = document.querySelectorAll('#feed .slide.active');
+  if (!slides.length) slides = document.querySelectorAll('#feed .slide');
+  for (var i = 0; i < slides.length; i++){
+    var s = slides[i];
+    var w = s.querySelector('.watchall'), sh = s.querySelector('[data-share]');
+    if (!w || !sh) continue;
+    var wr = w.getBoundingClientRect(), sr = sh.getBoundingClientRect();
+    if (!wr.height || !sr.height) return;
+    var delta = (sr.top + sr.height / 2) - (wr.top + wr.height / 2);
+    if (Math.abs(delta) > 1){
+      var acts = s.querySelector('.acts');
+      var cur = parseFloat(window.getComputedStyle(acts).bottom) || 21;
+      acts.style.bottom = Math.max(0, cur + delta) + 'px';
+    }
+  }
+}
+if (typeof window !== 'undefined' && !window._alignShareBound){
+  window._alignShareBound = true;
+  window.addEventListener('resize', function(){ setTimeout(alignShare, 120); });
+}
+var APP_VERSION = '1.2.0.8';
+var SHARE_BASE = 'https://hg.45678.eu.org/';
+/* 1.2.0.6：分享面板里的“下载 App”地址。发新版时只改这一处常量 + 各处版本号。 */
+var APK_RELEASE_URL = 'https://github.com/vps1986/hghub-clone/releases/download/v1.2.0.8/HGhub-1.2.0.8.apk';
+var $ = function(s){ return document.querySelector(s); };
+var $$ = function(s){ return Array.prototype.slice.call(document.querySelectorAll(s)); };
+var store = {
+  get: function(k, d){ try { var v = JSON.parse(localStorage.getItem(k)); return v === null || v === undefined ? d : v; } catch(e){ return d; } },
+  set: function(k, v){ try { localStorage.setItem(k, JSON.stringify(v)); } catch(e){} }
+};
+var feedItems = [], catItems = [], curVideo = null, curEp = 1, curStreams = {}, curDetail = null, hls = null;
+var playCache = {}; /* "id:ep" -> streams，直连/代理共用，预加载下一集用 */
+var preloadSet = {};
+function playKey(id, ep){ return id + ':' + ep; }
+/* 封面本地缓存：Cache API 存 /proxy/img 解密后的 JPEG，第二次打开不走网络 */
+var COVER_CACHE = 'hg-covers-v1';
+function primeCoverCache(root){
+  if (!('caches' in window)) return;
+  (root || document).querySelectorAll('img[data-raw]').forEach(function(img){
+    var proxyUrl = img.getAttribute('src');
+    if (!proxyUrl || proxyUrl.indexOf('/proxy/img') !== 0) return;
+    caches.open(COVER_CACHE).then(function(c){
+      return c.match(proxyUrl).then(function(hit){
+        if (hit) return hit.blob();
+        return fetch(proxyUrl).then(function(r){
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+          var clone = r.clone();
+          c.put(proxyUrl, clone).catch(function(){});
+          return r.blob();
+        });
+      }).then(async function(blob){
+        /* 1.2.0.4：只换上校验过的真 JPEG/PNG，解密失败的密文绝不换上去 */
+        if (!blob || blob.size <= 1000) return;
+        try {
+          var head = new Uint8Array(await blob.slice(0, 4).arrayBuffer());
+          var isJpeg = head[0] === 0xFF && head[1] === 0xD8 && head[2] === 0xFF;
+          var isPng = head[0] === 0x89 && head[1] === 0x50 && head[2] === 0x4E && head[3] === 0x47;
+          if (isJpeg || isPng) img.src = URL.createObjectURL(blob);
+        } catch(e){}
+      }).catch(function(){});
+    });
+  });
+}
+/* 预加载：提前拿下一集播放链接 + 拉一次清单，点下一集时直接起播 */
+async function preloadPlay(id, ep){
+  var k = playKey(id, ep);
+  if (preloadSet[k] || playCache[k]) return;
+  preloadSet[k] = true;
+  try {
+    var r = await fetch('/api/play', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({id:id, ep:ep})});
+    var d = await r.json();
+    var st = (d.data && d.data.streams) || d.streams || {};
+    var src = st.main || st.hevc || st.preview;
+    if (src){ playCache[k] = st; fetch('/proxy/m3u8?url=' + encodeURIComponent(src)).catch(function(){}); }
+  } catch(e){}
+}
+/* 观看进度：每 5 秒存一次，续播用 */
+function saveProgress(){
+  var v = $('#video');
+  if (!curVideo || !v || !v.duration || v.currentTime < 10) return;
+  var prog = store.get('hg_progress', {});
+  prog[curVideo] = {ep: curEp, t: Math.floor(v.currentTime), dur: Math.floor(v.duration), at: Date.now()};
+  store.set('hg_progress', prog);
+}
+function getProgress(id){ return store.get('hg_progress', {})[id] || null; }
+function esc(s){ return String(s === undefined || s === null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+// 封面图修复：pic.drleao.cn 下发的封面是 AES-128-CBC 加密过的字节，
+// 浏览器直接当 <img> 加载永远显示不出来（见 web/server.py 的 /proxy/img）。
+// 所以封面一律走本站同源代理：服务端先拉取再解密，返回正常 JPEG。
+// 直连地址只作兜底（onerror 时换回原地址，部分旧图可能是明文）。
+function coverSrc(url){
+  if (!url) return '';
+  if (url.indexOf('/proxy/img?url=') === 0) return url;
+  return '/proxy/img?url=' + encodeURIComponent(url);
+}
+function coverPlaceholder(title){
+  var t = esc(String(title || 'HGhub').slice(0, 10));
+  var svg = "<svg xmlns='http://www.w3.org/2000/svg' width='600' height='800'><defs><linearGradient id='g' x1='0' y1='0' x2='1' y2='1'><stop offset='0' stop-color='#2b2b35'/><stop offset='1' stop-color='#141419'/></linearGradient></defs><rect width='600' height='800' fill='url(#g)'/><text x='300' y='390' font-size='44' fill='#ff2d55' text-anchor='middle' font-family='sans-serif'>HGhub</text><text x='300' y='440' font-size='22' fill='#9a9aa3' text-anchor='middle' font-family='sans-serif'>" + t + "</text></svg>";
+  return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+}
+/* 封面三级兜底：/proxy/img 解密图 -> 直连原地址 -> 占位图。画面永远不会全黑。 */
+function coverErr(img){
+  if (!img.dataset.fb){ img.dataset.fb = 1; img.src = img.dataset.raw || ''; }
+  else if (!img.dataset.fb2){ img.dataset.fb2 = 1; img.onerror = null; img.src = coverPlaceholder(img.dataset.title || ''); }
+}
+function coverImg(url, cls, title, eager){
+  return '<img class="' + (cls || '') + '" loading="' + (eager ? 'eager' : 'lazy') + '"' + (eager ? ' fetchpriority="high"' : '') +
+    ' src="' + esc(coverSrc(url)) + '" data-raw="' + esc(url || '') + '" data-title="' + esc(title || '') +
+    '" onerror="coverErr(this)" referrerpolicy="no-referrer" alt="">';
+}
+function fmtN(n){ n = +n || 0; if (n >= 10000) return (n / 10000).toFixed(1) + '万'; return String(n); }
+function fmtDur(s){ s = +s || 0; var m = Math.floor(s / 60), ss = s % 60; return m + ':' + String(ss).padStart(2, '0'); }
+function toast(t){ var el = $('#toast'); el.textContent = t; el.style.display = 'block'; setTimeout(function(){ el.style.display = 'none'; }, 2200); }
+function hashStr(s){ var h = 0; for (var i = 0; i < s.length; i++){ h = (h * 31 + s.charCodeAt(i)) >>> 0; } return 'h' + h; }
+/* 1.2.0.5 搜索/底部导航修法见文末绑定区与 loadHotTags（热门标签 word 字段、文档级捕获委托、内联 onclick 兜底）。
+   1.2.0.4 滑不动的根因之一：以前先直连上游 huangguoai.com，手机网络下直连经常
+   挂起几十秒不返回，而 loading 标志一直占着，下一页永远加载不出来。
+   现在先走本站同源直接 /api/*（server.py 通用路由反代到上游），失败再走本站
+   /api/up/*；两路都是同源，不再跨域直连上游（1.2.0.6）。
+   每次尝试 15 秒超时，超时就换下一路，不会无限挂住。 */
+async function api(path){
+  var urls = [path, '/api/up/' + path.replace(/^\/api\//, '')];
+  var lastErr = null;
+  for (var i = 0; i < urls.length; i++){
+    var ctrl = new AbortController();
+    var timer = setTimeout(function(){ try { ctrl.abort(); } catch(e){} }, 15000);
+    try {
+      var r = await fetch(urls[i], {headers: {'Accept': 'application/json'}, signal: ctrl.signal});
+      clearTimeout(timer);
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      var j = await r.json();
+      if (j && j.data !== undefined) return j;
+      return {data: j};
+    } catch(e){ clearTimeout(timer); lastErr = e; }
+  }
+  throw lastErr || new Error('请求失败');
+}
+function itemsOf(j){
+  if (!j) return [];
+  var d = j.data !== undefined ? j.data : j;
+  if (Array.isArray(d)) return d;
+  if (d && Array.isArray(d.items)) return d.items;
+  if (d && Array.isArray(d.list)) return d.list;
+  if (d && Array.isArray(d.videos)) return d.videos;
+  return [];
+}
+/* 1.2.0.3 分页：上游 /api/videos 每页 20 条，?page=N 翻页，limit 无效。
+   实测 2026-11-11：全部 3361 部 / 169 页；分类 cate_id=24:1518部/76页，
+   25:113部/6页，26:832部/42页，27:898部/45页；搜索 /api/search?q= 分页；
+   帖子 /api/posts 749 条/38 页；/api/feed/today 只有 23 条，不能当主列表；
+   榜单 /api/ranks/* 只返回前 20，page 参数无效，无法翻页。 */
+function pagOf(j){
+  var d = j && j.data !== undefined ? j.data : j;
+  var p = (d && d.pagination) || {};
+  return {page: p.page || 1, pages: p.pages || 1, size: p.size || 20, total: p.total || 0};
+}
+var feedState = {page: 0, pages: 1, total: 0, loading: false, done: false};
+var runToken = {home: 0, cat: 0, search: 0, post: 0, rank: 0};
+var catState = {cat: '', page: 0, pages: 1, total: 0, loading: false, done: false};
+var searchState = {q: '', page: 0, pages: 1, total: 0, loading: false, done: false};
+var postState = {page: 0, pages: 1, total: 0, loading: false, done: false};
+function dedupeAppend(list, items){
+  var seen = {};
+  list.forEach(function(v){ seen[v.id] = true; });
+  var added = [];
+  items.forEach(function(v){ if (!seen[v.id]){ seen[v.id] = true; list.push(v); added.push(v); } });
+  return added;
+}
+function updateTotal(el, shown, total){
+  if (!el) return;
+  el.textContent = total ? ('全部 ' + total + ' 部 · 已加载 ' + shown + ' 部') : ('已加载 ' + shown + ' 部');
+}
+function isLiked(id){ return !!store.get('hg_likes', {})[id]; }
+function isFav(id){ return store.get('hg_fav', []).some(function(x){ return x.id === id; }); }
+function toggleLike(v){
+  var likes = store.get('hg_likes', {});
+  likes[v.id] = !likes[v.id];
+  store.set('hg_likes', likes);
+  toast(likes[v.id] ? '已点赞' : '已取消点赞');
+  $$('[data-like="' + v.id + '"]').forEach(function(b){ b.classList.toggle('liked', likes[v.id]); b.textContent = likes[v.id] ? '♥' : '♡'; });
+  var base = +v.like_count || 0;
+  $$('[data-likecount="' + v.id + '"]').forEach(function(s){ s.textContent = '♥ ' + fmtN(base + (likes[v.id] ? 1 : 0)); });
+}
+function toggleFav(v){
+  var f = store.get('hg_fav', []);
+  var i = f.findIndex(function(x){ return x.id === v.id; });
+  if (i >= 0){ f.splice(i, 1); toast('已取消收藏'); }
+  else { f.unshift({id: v.id, title: v.title, cover: v.cover}); toast('已收藏'); }
+  store.set('hg_fav', f);
+  $$('[data-fav="' + v.id + '"]').forEach(function(b){ b.innerHTML = ic('star', isFav(v.id)); b.classList.toggle('faved', isFav(v.id)); });
+  var base = +v.collect_count || 0;
+  $$('[data-favcount="' + v.id + '"]').forEach(function(s){ s.textContent = fmtN(base + (isFav(v.id) ? 1 : 0)); }); /* 1.2.0.8+：收藏计数只留纯数字，不再重画一个星星图标 */
+  if (!$('#view-me').hidden) renderMe();
+}
+function addHistory(v, ep){
+  var h = store.get('hg_history', []).filter(function(x){ return x.id !== v.id; });
+  h.unshift({id: v.id, title: v.title, cover: v.cover, ep: ep || 1, t: Date.now()});
+  store.set('hg_history', h.slice(0, 50));
+}
+function slideHtml(v, i){
+  var liked = isLiked(v.id), fav = isFav(v.id);
+  var likeN = (+v.like_count || 0) + (liked ? 1 : 0);
+  var favN = (+v.collect_count || 0) + (fav ? 1 : 0);
+  var cmtN = +v.comment_count || 0;
+  var eager = i < 3;
+  return '<div class="slide" data-id="' + v.id + '" data-i="' + i + '">' +
+    coverImg(v.cover, 'cover', v.title, eager) +
+    '<video class="bgvid" muted playsinline preload="metadata" poster="' + esc(coverSrc(v.cover)) + '"></video>' +
+    '<div class="centerflash"></div>' +
+    '<button class="mutebtn" data-mute="' + v.id + '">' + ic('volx') + '</button>' +
+    '<div class="shade"></div>' +
+    '<div class="info"><h3 data-detail="' + v.id + '">' + esc(v.title || '') + '</h3>' +
+    '<p class="syn" data-syn="' + v.id + '">' + esc(v.description || '') + '</p>' +
+    '<div class="meta">' + esc((v.author && v.author.name) || '') + ' · ' + (v.episode_count || v.total_episodes || '') + '集 · ' + ic('star') + ' ' + fmtN(v.collect_count) + '</div>' + /* 1.2.0.8：去掉点赞爱心计数 */
+    '<button type="button" class="watchall" data-detail="' + v.id + '">▶ 看全集 · ' + (v.episode_count || v.total_episodes || '') + '集</button></div>' + /* 1.2.0.7：feed 卡片直接显示标题 + 一行简介（点简介展开）+ 黄色“看全集”按钮。点标题区/看全集进详情；点视频空白处暂停/继续（slide 点击处理里 .info 已排除在暂停之外，不冲突）；双击点赞。 */
+    '<div class="acts">' +
+    /* 1.2.0.8+：右侧栏评论/收藏图标重复的根因——计数行里又各画了一个气泡/星星图标（按钮里已有），
+       数字行只留纯数字；分享按钮下面的“分享”文字删掉，只留箭头图标 */
+    '<button data-comment="' + v.id + '">' + ic('comment') + '</button><span>' + fmtN(cmtN) + '</span>' +
+    '<button data-fav="' + v.id + '" class="' + (fav ? 'faved' : '') + '">' + ic('star', fav) + '</button><span data-favcount="' + v.id + '">' + fmtN(favN) + '</span>' +
+    '<button data-share="' + v.id + '">' + ic('share') + '</button>' +
+    '</div>' +
+    '<div class="prog"><div class="progfill"></div></div></div>';
+}
+function cardHtml(v){
+  return '<div class="card" data-id="' + v.id + '">' +
+    coverImg(v.cover, '', v.title) +
+    '<div class="t"><h4>' + esc(v.title || '') + '</h4>' +
+    '<p>' + (v.episode_count || v.total_episodes || '') + '集 · ' + ic('star') + ' ' + fmtN(v.collect_count) + '</p></div></div>'; /* 1.2.0.8：卡片去掉点赞爱心计数 */
+}
+function bindClicks(root){
+  root.querySelectorAll('[data-like]').forEach(function(b){
+    if (b.dataset.bound) return; b.dataset.bound = 1;
+    b.onclick = function(e){ e.stopPropagation(); var v = findVideo(+b.getAttribute('data-like')); if (v) toggleLike(v); };
+  });
+  root.querySelectorAll('[data-fav]').forEach(function(b){
+    if (b.dataset.bound) return; b.dataset.bound = 1;
+    b.onclick = function(e){ e.stopPropagation(); var v = findVideo(+b.getAttribute('data-fav')); if (v) toggleFav(v); };
+  });
+  root.querySelectorAll('[data-comment]').forEach(function(b){
+    if (b.dataset.bound) return; b.dataset.bound = 1;
+    b.onclick = function(e){ e.stopPropagation(); openComments(+b.getAttribute('data-comment')); };
+  });
+  root.querySelectorAll('[data-share]').forEach(function(b){
+    if (b.dataset.bound) return; b.dataset.bound = 1;
+    b.onclick = function(e){ e.stopPropagation(); openShare(+b.getAttribute('data-share'), 1); };
+  });
+  root.querySelectorAll('[data-mute]').forEach(function(b){
+    if (b.dataset.bound) return; b.dataset.bound = 1;
+    b.onclick = function(e){ e.stopPropagation(); toggleMute(); };
+  });
+  root.querySelectorAll('[data-play]').forEach(function(b){
+    if (b.dataset.bound) return; b.dataset.bound = 1;
+    b.onclick = function(e){ e.stopPropagation(); openDetail(+b.getAttribute('data-play')); };
+  });
+  root.querySelectorAll('[data-detail]').forEach(function(el){
+    if (el.dataset.bound) return; el.dataset.bound = 1;
+    el.onclick = function(e){ e.stopPropagation(); openDetail(+el.getAttribute('data-detail')); };
+  });
+  root.querySelectorAll('[data-syn]').forEach(function(el){
+    if (el.dataset.bound) return; el.dataset.bound = 1;
+    el.onclick = function(e){ e.stopPropagation(); el.classList.toggle('expanded'); setTimeout(alignShare, 50); }; /* 1.2.0.7：点简介展开/收起完整文案，不进详情、不暂停 */
+  });
+  root.querySelectorAll('.slide').forEach(function(s){
+    if (s.dataset.bound) return; s.dataset.bound = 1;
+    var lastTap = 0, tapTimer = null;
+    s.addEventListener('click', function(e){
+      if (e.target.closest('.acts, .info, .mutebtn, .prog')) return;
+      var now = Date.now();
+      if (now - lastTap < 300){
+        clearTimeout(tapTimer); lastTap = 0;
+        var v = findVideo(+s.getAttribute('data-id'));
+        if (v && !isLiked(v.id)) toggleLike(v);
+        var h = document.createElement('div');
+        h.className = 'heartpop'; h.textContent = '♥';
+        s.appendChild(h); setTimeout(function(){ h.remove(); }, 750);
+      } else {
+        lastTap = now;
+        tapTimer = setTimeout(function(){ lastTap = 0; toggleSlidePause(+s.getAttribute('data-id')); }, 300);
+      }
+    });
+    var prog = s.querySelector('.prog');
+    if (prog) prog.addEventListener('click', function(e){
+      e.stopPropagation();
+      var v = s.querySelector('video.bgvid');
+      if (v && v.duration){ v.currentTime = (e.offsetX / prog.clientWidth) * v.duration; }
+    });
+    var vid = s.querySelector('video.bgvid');
+    if (vid){
+      vid.addEventListener('timeupdate', function(){
+        if (!vid.duration) return;
+        var f = s.querySelector('.progfill');
+        if (f) f.style.width = Math.min(100, (vid.currentTime / vid.duration) * 100) + '%';
+      });
+      vid.addEventListener('ended', function(){
+        var box = $('#feed');
+        var i = +s.getAttribute('data-i');
+        var next = box.querySelector('.slide[data-i="' + (i + 1) + '"]');
+        if (next) box.scrollTo({top: next.offsetTop, behavior: 'smooth'});
+      });
+    }
+  });
+  root.querySelectorAll('.card').forEach(function(c){
+    if (c.dataset.bound) return; c.dataset.bound = 1;
+    c.onclick = function(){ openDetail(+c.getAttribute('data-id')); };
+  });
+  root.querySelectorAll('.rankrow').forEach(function(r){
+    if (r.dataset.bound) return; r.dataset.bound = 1;
+    r.onclick = function(){ openDetail(+r.getAttribute('data-id')); };
+  });
+  updateMuteBtns();
+  primeCoverCache(root);
+}
+/* 1.2.0.4 抖音式自动播放：滑到哪集就播哪集（静音起播，点画面后开声音），
+   滑走就暂停上一集；只保留当前和前后 2 集的播放器，远的销毁省内存。 */
+var slideHls = {};
+var activeSlideId = null;
+function slidePitch(box){ var s = box.querySelector('.slide'); return s ? s.offsetHeight : box.clientHeight; }
+async function activateSlide(el, id){
+  if (activeSlideId === id) return;
+  pauseAllSlideVideos(id);
+  activeSlideId = id;
+  var v = el.querySelector('video.bgvid');
+  if (!v) return;
+  v.muted = store.get('hg_muted', true);
+  try {
+    var st = playCache[playKey(id, 1)];
+    if (!st){
+      var r = await fetch('/api/play', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({id: id, ep: 1})});
+      var d = await r.json();
+      st = (d.data && d.data.streams) || d.streams || {};
+      playCache[playKey(id, 1)] = st;
+    }
+    if (activeSlideId !== id) return;
+    var src = st.main || st.hevc || st.preview;
+    if (!src) return;
+    attachSlideVideo(el, id, src);
+  } catch(e){}
+}
+function attachSlideVideo(el, id, src){
+  var v = el.querySelector('video.bgvid');
+  if (!v) return;
+  var line = store.get('hg_line', 'direct');
+  var url = (line === 'direct') ? src : '/proxy/m3u8?url=' + encodeURIComponent(src);
+  if (window.Hls && Hls.isSupported()){
+    if (slideHls[id]) { try { slideHls[id].destroy(); } catch(e){} }
+    var h = new Hls({maxBufferLength: 30});
+    slideHls[id] = h;
+    h.loadSource(url);
+    h.attachMedia(v);
+    h.on(Hls.Events.ERROR, function(ev, data){
+      if (data && data.fatal){
+        var next = (line === 'direct') ? 'proxy' : 'direct';
+        store.set('hg_line', next);
+        if (slideHls[id]) { try { slideHls[id].destroy(); } catch(e){} delete slideHls[id]; }
+        if (activeSlideId === id) attachSlideVideo(el, id, src);
+      }
+    });
+  } else if (v.canPlayType('application/vnd.apple.mpegurl')) { v.src = url; }
+  var p = v.play();
+  if (p && p.catch) p.catch(function(){ showCenterFlash(el, '▶'); });
+}
+function pauseAllSlideVideos(exceptId){
+  $$('#feed .slide').forEach(function(s){
+    var vid = +s.getAttribute('data-id');
+    if (vid === exceptId) return;
+    var v = s.querySelector('video.bgvid');
+    if (v && !v.paused) v.pause();
+  });
+}
+function deactivateFarSlides(idx){
+  $$('#feed .slide').forEach(function(s){
+    var i = +s.getAttribute('data-i');
+    if (Math.abs(i - idx) > 2){
+      var v = s.querySelector('video.bgvid');
+      if (v){ try { v.pause(); v.removeAttribute('src'); v.load(); } catch(e){} }
+      var id = +s.getAttribute('data-id');
+      if (slideHls[id]){ try { slideHls[id].destroy(); } catch(e){} delete slideHls[id]; }
+    }
+  });
+}
+function toggleSlidePause(id){
+  var el = document.querySelector('#feed .slide[data-id="' + id + '"]');
+  if (!el) return;
+  var v = el.querySelector('video.bgvid');
+  if (!v || (!v.src && !v.currentSrc)) return;
+  if (v.paused){ var p = v.play(); if (p && p.catch) p.catch(function(){}); showCenterFlash(el, '▶'); }
+  else { v.pause(); showCenterFlash(el, '❚❚'); }
+  if (store.get('hg_muted', true)){ store.set('hg_muted', false); v.muted = false; updateMuteBtns(); }
+}
+function showCenterFlash(el, txt){
+  var f = el.querySelector('.centerflash');
+  if (!f) return;
+  f.textContent = txt;
+  f.classList.remove('flashshow'); void f.offsetWidth; f.classList.add('flashshow');
+}
+function toggleMute(){
+  var m = !store.get('hg_muted', true);
+  store.set('hg_muted', m);
+  var cur = document.querySelector('#feed .slide.active video.bgvid');
+  if (cur) cur.muted = m;
+  updateMuteBtns();
+  toast(m ? '已静音' : '声音已开');
+}
+function updateMuteBtns(){
+  $$('[data-mute]').forEach(function(b){ b.innerHTML = store.get('hg_muted', true) ? ic('volx') : ic('vol'); });
+}
+/* 1.2.0.4 feed 初始化：原生滚动 + scroll-snap（不再劫持 wheel/touch，
+   旧劫持会和 snap 打架、滑到一半卡住）；滚动用 rAF 节流；
+   无限滚动双重触发：滚动位置判断 + 底部哨兵 IntersectionObserver。 */
+var _feedInit = false;
+function initFeed(box){
+  if (!_feedInit){
+    _feedInit = true;
+    var ticking = false;
+    box.addEventListener('scroll', function(){
+      if (ticking) return; ticking = true;
+      requestAnimationFrame(function(){
+        ticking = false;
+        var idx = Math.max(0, Math.round(box.scrollTop / slidePitch(box)));
+        setActiveSlide(idx);
+        if (feedState.loading || feedState.done) return;
+        if (box.scrollTop + box.clientHeight >= box.scrollHeight - box.clientHeight * 1.5) loadHomeNext();
+      });
+    }, {passive: true});
+    if (!window._feedSentinelIO){
+      window._feedSentinelIO = new IntersectionObserver(function(entries){
+        entries.forEach(function(en){ if (en.isIntersecting) loadHomeNext(); });
+      }, {root: box, threshold: 0.05});
+    }
+    window._moveSentinel = function(){
+      var s = box.querySelector('#feedSentinel');
+      if (!s){ s = document.createElement('div'); s.id = 'feedSentinel'; s.className = 'feedsentinel'; box.appendChild(s); }
+      else box.appendChild(s);
+      window._feedSentinelIO.observe(s);
+    };
+    if (!window._slideIO){
+      window._slideIO = new IntersectionObserver(function(entries){
+        entries.forEach(function(en){
+          if (!en.isIntersecting) return;
+          var el = en.target;
+          el.classList.add('active');
+          var id = +el.getAttribute('data-id');
+          activateSlide(el, id);
+          var i = +el.getAttribute('data-i');
+          if (feedItems[i + 1]) preloadPlay(feedItems[i + 1].id, 1);
+        });
+      }, {root: box, threshold: 0.6});
+    }
+    window._observeSlides = function(root){
+      root.querySelectorAll('.slide').forEach(function(s){ window._slideIO.observe(s); });
+    };
+  }
+  window._observeSlides(box);
+  window._moveSentinel();
+}
+function setActiveSlide(idx){
+  var slides = $$('#feed .slide');
+  slides.forEach(function(s, k){ s.classList.toggle('active', k === idx); });
+  deactivateFarSlides(idx);
+}
+function findVideo(id){
+  var all = feedItems.concat(catItems);
+  for (var i = 0; i < all.length; i++) if (+all[i].id === +id) return all[i];
+  return {id: id, title: '', cover: ''};
+}
+/* 1.2.0.3 首页主列表：/api/videos 全量分页（全部 3361 部/169 页），
+   不再用只有 23 条的 /api/feed/today。无限滚动到底自动加载下一页。 */
+async function loadHome(){
+  var box = $('#feed');
+  feedState = {page: 0, pages: 1, total: 0, loading: false, done: false, retries: 0};
+  feedItems = [];
+  box.innerHTML = '<div class="empty">加载中...</div>';
+  await loadHomeNext(true);
+  startAutoRefresh();
+}
+async function loadHomeNext(isFirst){
+  var box = $('#feed');
+  if (feedState.loading || feedState.done) return;
+  feedState.loading = true;
+  var nextPage = feedState.page + 1;
+  try {
+    var j = await api('/api/videos?page=' + nextPage);
+    var items = itemsOf(j);
+    var pg = pagOf(j);
+    feedState.page = pg.page; feedState.pages = pg.pages; feedState.total = pg.total;
+    feedState.retries = 0;
+    var rb = box.querySelector('.feedretry');
+    if (rb) rb.remove();
+    if (!items.length){ feedState.done = true; }
+    var added = dedupeAppend(feedItems, items);
+    var tmp = document.createElement('div');
+    tmp.innerHTML = added.map(function(v){
+      var idx = feedItems.indexOf(v);
+      return slideHtml(v, idx);
+    }).join('');
+    bindClicks(tmp);
+    if (isFirst){
+      box.innerHTML = '';
+      while (tmp.firstChild) box.appendChild(tmp.firstChild);
+      feedItems.slice(0, 3).forEach(function(v){ preloadPlay(v.id, 1); });
+      initFeed(box);
+    } else {
+      var endEl = box.querySelector('.feedend');
+      if (endEl) endEl.remove();
+      while (tmp.firstChild) box.appendChild(tmp.firstChild);
+      if (window._observeSlides) window._observeSlides(box);
+      if (window._moveSentinel) window._moveSentinel();
+    }
+    if (feedState.page >= feedState.pages || !items.length){
+      feedState.done = true;
+      var end = document.createElement('div');
+      end.className = 'feedend';
+      end.textContent = '已加载全部 ' + feedState.total + ' 部';
+      box.appendChild(end);
+      if (window._moveSentinel) window._moveSentinel();
+    }
+    updateTotal($('#homeTotal'), feedItems.length, feedState.total);
+    alignShare();
+  } catch(e){
+    /* 1.2.0.4：失败不再只 toast 一下就卡死。3 秒后自动重试一次，
+       再失败就在列表底部放一个可点击的重试条，点一下继续加载。 */
+    feedState.retries = (feedState.retries || 0) + 1;
+    if (isFirst){
+      box.innerHTML = '<div class="empty">加载失败：' + esc(e.message || e) + '<br><br><button class="btn" onclick="loadHome()">点击重试</button></div>';
+    } else {
+      toast('加载下一页失败：' + (e.message || e) + '，3 秒后自动重试');
+      if (feedState.retries <= 2){
+        setTimeout(function(){ if (!feedState.done) loadHomeNext(); }, 3000);
+      } else if (!box.querySelector('.feedretry')){
+        var rb2 = document.createElement('div');
+        rb2.className = 'feedretry';
+        rb2.textContent = '加载失败，点击重试';
+        rb2.onclick = function(){ rb2.remove(); loadHomeNext(); };
+        box.appendChild(rb2);
+        if (window._moveSentinel) window._moveSentinel();
+      }
+    }
+  } finally {
+    feedState.loading = false;
+  }
+}
+/* 1.2.0.3 自动更新：打开时比对首页第一页的 ID 和总数，有新剧就提示；
+   每 10 分钟后台静默刷新第一页，只提示不打断当前浏览；点横幅重新加载。 */
+var _refreshTimer = null;
+function knownSet(){
+  return {ids: store.get('hg_known_ids', []), total: store.get('hg_known_total', 0)};
+}
+function saveKnown(ids, total){
+  store.set('hg_known_ids', ids.slice(0, 60));
+  store.set('hg_known_total', total);
+}
+async function checkUpdates(silent){
+  try {
+    var j = await api('/api/videos?page=1');
+    var items = itemsOf(j);
+    var pg = pagOf(j);
+    var known = knownSet();
+    var oldIds = {};
+    known.ids.forEach(function(id){ oldIds[id] = true; });
+    var fresh = items.filter(function(v){ return !oldIds[v.id]; });
+    var totalDiff = Math.max(0, pg.total - (known.total || pg.total));
+    var newCount = Math.max(fresh.length, totalDiff);
+    if (!known.ids.length){
+      saveKnown(items.map(function(v){ return v.id; }), pg.total);
+      return 0;
+    }
+    saveKnown(items.map(function(v){ return v.id; }), pg.total);
+    if (newCount > 0){
+      var banner = $('#newBanner');
+      if (banner){
+        banner.textContent = '有 ' + newCount + ' 部新更新，点击查看';
+        banner.hidden = false;
+        banner.onclick = function(){ banner.hidden = true; loadHome(); };
+      }
+      if (!silent) toast('发现 ' + newCount + ' 部新更新');
+      return newCount;
+    }
+    return 0;
+  } catch(e){ return 0; }
+}
+function startAutoRefresh(){
+  if (_refreshTimer) return;
+  checkUpdates(true);
+  _refreshTimer = setInterval(function(){ checkUpdates(true); }, 10 * 60 * 1000);
+}
+async function loadCats(){
+  var box = $('#catChips');
+  try {
+    var j = await api('/api/site/categories/video');
+    var cats = itemsOf(j);
+    var html = '<button class="chip on" data-cat="">全部</button>';
+    cats.forEach(function(c){
+      var name = c.name || c.title || c;
+      var id = c.id !== undefined ? c.id : name;
+      html += '<button class="chip" data-cat="' + esc(id) + '">' + esc(name) + '</button>';
+    });
+    box.innerHTML = html;
+    /* chip 点击由文末文档级委托统一处理，这里不再逐个绑 onclick，
+       否则一次点击会跑两次 loadCatVideos 并发刷掉列表。 */
+  } catch(e){ box.innerHTML = '<span class="hint">分类加载失败</span>'; }
+  loadCatVideos('');
+}
+/* 1.2.0.3 分类：上游参数是 cate_id（不是 category_id，后者会被忽略返回全量）。
+   各分类实测：24 AI成人短剧 1518部/76页，25 AI成人漫剧 113部/6页，
+   26 AI换脸 832部/42页，27 AI魔改 898部/45页。无限滚动加载全部。 */
+async function loadCatVideos(cat){
+  runToken.cat++;
+  catState = {cat: cat || '', page: 0, pages: 1, total: 0, loading: false, done: false};
+  catItems = [];
+  var grid = $('#catGrid');
+  grid.innerHTML = '<div class="empty">加载中...</div>';
+  $('#catEnd').hidden = true;
+  await loadCatNext();
+}
+async function loadCatNext(){
+  var grid = $('#catGrid');
+  if (catState.loading || catState.done) return;
+  catState.loading = true;
+  var nextPage = catState.page + 1;
+  var myRun = runToken.cat;
+  try {
+    var path = '/api/videos?page=' + nextPage;
+    if (catState.cat) path += '&cate_id=' + encodeURIComponent(catState.cat);
+    var j = await api(path);
+    if (myRun !== runToken.cat) return;
+    var items = itemsOf(j);
+    var pg = pagOf(j);
+    catState.page = pg.page; catState.pages = pg.pages; catState.total = pg.total;
+    var added = dedupeAppend(catItems, items);
+    var html = added.map(cardHtml).join('');
+    if (nextPage === 1) grid.innerHTML = html || '<div class="empty">该分类暂无内容</div>';
+    else grid.insertAdjacentHTML('beforeend', html);
+    bindClicks(grid);
+    if (catState.page >= catState.pages || !items.length){
+      catState.done = true;
+      $('#catEnd').hidden = false;
+    }
+    updateTotal($('#catTotal'), catItems.length, catState.total);
+  } catch(e){
+    if (nextPage === 1) grid.innerHTML = '<div class="empty">加载失败：' + esc(e.message || e) + '</div>';
+    else toast('加载下一页失败：' + (e.message || e));
+  } finally {
+    catState.loading = false;
+  }
+}
+async function loadRank(type){
+  var myRun = ++runToken.rank;
+  var box = $('#rankList');
+  box.innerHTML = '<div class="empty">加载中...</div>';
+  try {
+    var j = await api('/api/ranks/' + type);
+    if (myRun !== runToken.rank) return;
+    var items = itemsOf(j);
+    if (!items.length){
+      box.innerHTML = '<div class="empty">' + esc((j && j.msg) || '该榜单暂无数据') + '</div>';
+      return;
+    }
+    box.innerHTML = items.map(function(v, i){
+      return '<div class="rankrow" data-id="' + v.id + '"><div class="no">' + (i + 1) + '</div>' +
+        coverImg(v.cover, '', v.title) +
+        '<div><h4>' + esc(v.title || '') + '</h4><p>' + ic('star') + ' ' + fmtN(v.collect_count) + ' · ' + (v.episode_count || v.total_episodes || '') + '集</p></div></div>'; /* 1.2.0.8：榜单去掉点赞爱心计数 */
+    }).join('');
+    bindClicks(box);
+  } catch(e){ box.innerHTML = '<div class="empty">加载失败：' + esc(e.message || e) + '</div>'; }
+}
+/* 1.2.0.3 帖子：/api/posts 分页，实测 749 条/38 页，无限滚动加载全部。 */
+async function loadPosts(){
+  runToken.post++;
+  postState = {page: 0, pages: 1, total: 0, loading: false, done: false};
+  $('#postList').innerHTML = '<div class="empty">加载中...</div>';
+  $('#postEnd').hidden = true;
+  await loadPostNext();
+}
+async function loadPostNext(){
+  var box = $('#postList');
+  if (postState.loading || postState.done) return;
+  postState.loading = true;
+  var myRun = runToken.post;
+  var nextPage = postState.page + 1;
+  try {
+    var j = await api('/api/posts?page=' + nextPage);
+    if (myRun !== runToken.post) return;
+    var items = itemsOf(j);
+    var pg = pagOf(j);
+    postState.page = pg.page; postState.pages = pg.pages; postState.total = pg.total;
+    var html = items.map(function(p){
+      var body = p.content || p.text || p.description || '';
+      return '<div class="post" data-pid="' + p.id + '"><h4>' + esc(p.title || body.slice(0, 40) || '帖子') + '</h4>' +
+        '<p>' + esc(body) + '</p>' +
+        '<div class="meta">' + esc((p.author && p.author.name) || p.author_name || '') + ' · ' + ic('comment') + ' ' + fmtN(p.comment_count) + '</div></div>'; /* 1.2.0.8：帖子去掉点赞爱心计数 */
+    }).join('');
+    if (nextPage === 1) box.innerHTML = html || '<div class="empty">暂无帖子</div>';
+    else box.insertAdjacentHTML('beforeend', html);
+    box.querySelectorAll('.post').forEach(function(el){
+      el.onclick = function(){ toast('帖子详情：' + el.getAttribute('data-pid')); };
+    });
+    if (postState.page >= postState.pages || !items.length){
+      postState.done = true;
+      $('#postEnd').hidden = false;
+    }
+  } catch(e){
+    if (nextPage === 1) box.innerHTML = '<div class="empty">加载失败：' + esc(e.message || e) + '</div>';
+    else toast('加载下一页失败：' + (e.message || e));
+  } finally {
+    postState.loading = false;
+  }
+}
+/* 1.2.0.3 搜索：正确接口是 /api/search?q=（实测分页，例：搜“爱”187 条/10 页）。
+   旧代码试的 /api/search?keyword= 返回空、/api/videos?keyword= 会忽略关键词返回全量。 */
+async function doSearch(q){
+  q = (q || '').trim();
+  if (!q){ toast('请输入关键词'); return; }
+  runToken.search++;
+  showView('search');
+  searchState = {q: q, page: 0, pages: 1, total: 0, loading: false, done: false};
+  var grid = $('#searchGrid');
+  grid.innerHTML = '<div class="empty">搜索中...</div>';
+  $('#searchEmpty').hidden = true;
+  $('#searchEnd').hidden = true;
+  await loadSearchNext();
+}
+async function loadSearchNext(){
+  var grid = $('#searchGrid');
+  if (searchState.loading || searchState.done || !searchState.q) return;
+  searchState.loading = true;
+  var myRun = runToken.search;
+  var nextPage = searchState.page + 1;
+  try {
+    var j = await api('/api/search?q=' + encodeURIComponent(searchState.q) + '&page=' + nextPage);
+    if (myRun !== runToken.search) return;
+    var found = itemsOf(j);
+    var pg = pagOf(j);
+    searchState.page = pg.page; searchState.pages = pg.pages; searchState.total = pg.total;
+    var html = found.map(cardHtml).join('');
+    if (nextPage === 1) grid.innerHTML = html;
+    else grid.insertAdjacentHTML('beforeend', html);
+    bindClicks(grid);
+    $('#searchEmpty').hidden = searchState.total > 0 || found.length > 0 || nextPage > 1;
+    if (searchState.page >= searchState.pages || !found.length){
+      searchState.done = true;
+      if (searchState.total > 0) $('#searchEnd').hidden = false;
+    }
+    if (nextPage === 1 && !found.length){
+      /* 1.2.0.5：第一页一个结果都没有就明确显示“没有找到”，不要留空白 */
+      grid.innerHTML = '';
+      $('#searchEmpty').hidden = false;
+    }
+    updateTotal($('#searchTotal'), grid.querySelectorAll('.card').length, searchState.total);
+  } catch(e){
+    if (nextPage === 1) grid.innerHTML = '<div class="empty">搜索失败：' + esc(e.message || e) + '<br><br><button class="btn" onclick="loadSearchNext()">点击重试</button></div>';
+    else toast('加载下一页失败：' + (e.message || e));
+  } finally {
+    searchState.loading = false;
+  }
+}
+async function loadHotTags(){
+  try {
+    var j = await api('/api/search/hot');
+    var tags = itemsOf(j);
+    var tagNames = tags.map(function(t){
+      return typeof t === 'string' ? t : (t.word || t.name || t.keyword || t.tag || '');
+    }).filter(function(n){ return !!n; });
+    $('#hotTags').innerHTML = tagNames.slice(0, 12).map(function(name){
+      return '<button type="button" class="chip" data-tag="' + esc(name) + '">' + esc(name) + '</button>';
+    }).join('');
+    /* chip 点击由文末文档级委托统一处理，这里不再逐个绑 onclick。 */
+  } catch(e){}
+}
+async function openDetail(id){
+  /* 详情页：点封面/标题先进详情（封面大图、文案、标签、选集），不直接播；
+     点“立即播放”或某一集才进播放页。每次打开都重新拉 /api/videos/:id，
+     新更新的章节打开详情就能看到。 */
+  curVideo = id;
+  pauseAllSlideVideos(null); activeSlideId = null;
+  $('#player').hidden = false;
+  document.body.classList.add('modal-open'); /* 1.2.0.6：弹窗打开时隐藏顶栏（详情页自带返回按钮），锁住背后滚动；底栏 z-90 仍压在弹窗上面保持可见 */
+  showDetailPane();
+  $('#pTitle').textContent = '加载中...';
+  $('#pDesc').textContent = '';
+  $('#pDesc').classList.add('clamped');
+  var mb = $('#btnMoreDesc'); if (mb) mb.textContent = '展开介绍';
+  $('#pEps').innerHTML = '';
+  var dt = $('#dTags'); if (dt) dt.innerHTML = '';
+  var ds = $('#dStats'); if (ds) ds.innerHTML = '';
+  var dc = $('#dCoverImg'); if (dc) dc.src = '';
+  try {
+    var j = await api('/api/videos/' + id);
+    var d = j.data || j;
+    curDetail = d;
+    detailEpRange = 0;
+    var prog = getProgress(id);
+    curEp = (prog && prog.ep) || 1;
+    if (dc && d.cover){ dc.onerror = function(){ coverErr(dc); }; dc.setAttribute('data-raw', d.cover || ''); dc.setAttribute('data-title', d.title || ''); dc.alt = '《' + (d.title || '') + '》封面'; dc.src = coverSrc(d.cover); } /* 1.2.0.7：onerror 必须先于 src 挂上，否则加载失败太快会漏掉，封面直接黑屏；失败走 coverErr 三级兜底（解密图 -> 直连 -> 占位图）。 */
+    $('#pTitle').textContent = d.title || '';
+    var cat = ((d.breadcrumb && d.breadcrumb[0] && d.breadcrumb[0].name) || (d.tracking && d.tracking.drama_type_name) || '');
+    var status = d.is_finished ? '已完结' : '连载中';
+    var metaTxt = ((d.author && d.author.name) || '') + (cat ? ' · ' + cat : '') + ' · ' + status + ' · ' + (d.episode_count || d.total_episodes || '') + '集';
+    $('#pMeta').innerHTML = (d.score ? '<span class="score-badge">' + esc(d.score) + ' 分</span> ' : '') + esc(metaTxt); /* 1.2.0.7：评分做成预览图2那样的黄色徽章，放在简介行前面 */
+    var like = (d.counts && d.counts.like) || d.like_count || 0;
+    var fav = (d.counts && d.counts.collect) || d.collect_count || 0;
+    var cmt = (d.counts && d.counts.comment) || d.comment_count || 0;
+    var hot = (d.counts && d.counts.hot) || 0;
+    if (ds) ds.innerHTML = '<span>' + ic('star') + ' <b>' + fmtN(fav) + '</b></span><span>' + ic('comment') + ' <b>' + fmtN(cmt) + '</b></span>' + (hot ? '<span>热度 <b>' + fmtN(hot) + '</b></span>' : ''); /* 1.2.0.8：详情统计去掉点赞爱心计数 */
+    /* 1.2.0.8：详情右侧栏点赞按钮已移除 */
+    var rc = $('#dRailCommentN'); if (rc) rc.textContent = fmtN(cmt);
+    var rf = $('#dRailFavN'); if (rf){ rf.textContent = fmtN(fav); rf.setAttribute('data-favcount', id); }
+    var rfb = $('#dRailFav'); if (rfb){ rfb.setAttribute('data-fav', id); rfb.innerHTML = ic('star', isFav(id)); rfb.classList.toggle('faved', isFav(id)); } /* 1.2.0.7：详情页右侧操作栏（照预览图2），点赞/评论/收藏/分享带真实数字，和 feed 右侧栏一致 */
+    var syn = d.description || d.synopsis || '';
+    $('#pDesc').textContent = syn || (d.title || '');
+    var tags = d.tags || [];
+    if (dt) dt.innerHTML = tags.map(function(t){
+      var name = typeof t === 'string' ? t : (t.name || '');
+      return name ? '<button type="button" class="chip" data-dtag="' + esc(name) + '">' + esc(name) + '</button>' : '';
+    }).join('');
+    dt.querySelectorAll('[data-dtag]').forEach(function(b){
+      b.onclick = function(){ closePlayer(); $('#q').value = b.getAttribute('data-dtag'); doSearch(b.getAttribute('data-dtag')); };
+    });
+    var fv = findVideo(id);
+    if (fv && !fv.title && d.title){ fv.title = d.title; fv.cover = d.cover; }
+    renderEps();
+    var bp = $('#btnPlayDetail');
+    if (bp) bp.textContent = '▶ 看全集' + (prog && prog.ep > 1 ? '（续看第 ' + prog.ep + ' 集）' : '');
+    addHistory(fv && fv.title ? fv : {id: id, title: d.title, cover: d.cover}, curEp);
+  } catch(e){
+    $('#pTitle').textContent = '加载失败：' + (e.message || e);
+  }
+}
+async function playVideo(id, ep){
+  curVideo = id; curEp = ep || 1;
+  showPlayerPane();
+  markWatched(id, curEp);
+  renderEps();
+  var v = $('#video');
+  try {
+    var st = playCache[playKey(id, curEp)];
+    if (!st){
+      var r = await fetch('/api/play', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({id: id, ep: curEp})});
+      var d = await r.json();
+      if (!r.ok) throw new Error((d && (d.error || d.msg)) || ('HTTP ' + r.status));
+      st = (d.data && d.data.streams) || d.streams || {};
+      playCache[playKey(id, curEp)] = st;
+    }
+    curStreams = st;
+    var want = $('#streamSel').value || 'main';
+    var src = st[want] || st.main || st.hevc || st.preview;
+    if (!src) throw new Error('未拿到播放地址');
+    setPlayerSource(src);
+    var fv = findVideo(id);
+    if (fv) addHistory(fv, curEp);
+    preloadPlay(id, curEp + 1); /* 边播边预加载下一集 */
+    /* 续播：上次看到一半，自动跳回上次位置 */
+    var prog = getProgress(id);
+    if (prog && prog.ep === curEp && prog.t > 10 && prog.dur && prog.t < prog.dur - 10){
+      var _trySeek = function(){ try { v.currentTime = prog.t; } catch(e){} };
+      v.addEventListener('loadedmetadata', _trySeek, {once: true});
+      setTimeout(_trySeek, 800);
+      toast('已续播到 ' + fmtDur(prog.t));
+    }
+  } catch(e){
+    toast('播放失败：' + (e.message || e));
+  }
+}
+function setPlayerSource(src, tried){
+  var v = $('#video');
+  var line = store.get('hg_line', 'direct'); /* 1.2.0.2 默认直连 CDN 起播快，代理作备用 */
+  var url = (line === 'direct') ? src : '/proxy/m3u8?url=' + encodeURIComponent(src);
+  if (window.Hls && Hls.isSupported()){
+    if (hls) { try { hls.destroy(); } catch(e){} }
+    hls = new Hls({maxBufferLength: 30});
+    hls.loadSource(url);
+    hls.attachMedia(v);
+    hls.on(Hls.Events.ERROR, function(ev, data){
+      if (data && data.fatal && !tried){
+        var next = (line === 'direct') ? 'proxy' : 'direct';
+        toast((line === 'direct' ? '直连' : '代理') + '线路失败，尝试' + (next === 'direct' ? '直连' : '代理') + '...');
+        store.set('hg_line', next);
+        setPlayerSource(src, true);
+      }
+    });
+    v.play().catch(function(){});
+  } else if (v.canPlayType('application/vnd.apple.mpegurl')){
+    v.src = url;
+    v.play().catch(function(){});
+    v.addEventListener('error', function(){
+      if (!tried){
+        var next = (line === 'direct') ? 'proxy' : 'direct';
+        store.set('hg_line', next);
+        setPlayerSource(src, true);
+      }
+    }, {once: true});
+  } else {
+    v.src = url;
+  }
+}
+function closePlayer(){
+  var v = $('#video');
+  try { v.pause(); } catch(e){}
+  if (hls) { try { hls.destroy(); } catch(e){} hls = null; }
+  v.removeAttribute('src');
+  try { v.load(); } catch(e){}
+  $('#player').hidden = true;
+  document.body.classList.remove('modal-open');
+  showDetailPane();
+  if (!$('#view-home').hidden){
+    var box = $('#feed');
+    if (box && feedItems.length){
+      var idx = Math.max(0, Math.round(box.scrollTop / slidePitch(box)));
+      var el = box.querySelector('.slide[data-i="' + idx + '"]');
+      if (el) activateSlide(el, +el.getAttribute('data-id'));
+    }
+  }
+  if (!$('#view-me').hidden) renderMe();
+}
+/* 1.2.0.4 评论区：上游真实接口 GET /api/videos/:id/comments（2026-11-11 实测返回
+   {data:{items:[{nickname, content/text, time, like_count}]}}）；发评论先调上游
+   POST /api/up/videos/:id/comments（经 web/server.py 透传），上游不接受就只存本地。 */
+function openComments(id){
+  $('#commentSheet').hidden = false;
+  loadComments(id);
+}
+function closeComments(){ $('#commentSheet').hidden = true; }
+function commentHtml(name, time, text, likes, mine){
+  return '<div class="comment"><div class="cav">' + esc(String(name || '网').slice(0, 1)) + '</div><div class="cbody"><b>' + esc(name || '网友') + '</b> <span class="cmeta">' + esc(time || '') + '</span><p>' + esc(text || '') + '</p><span class="cmeta">' + (likes || 0) + ' 赞' + (mine ? ' · 本地' : '') + '</span></div></div>'; /* 1.2.0.8：评论区去掉爱心图标 */
+}
+async function loadComments(id){
+  var box = $('#commentList');
+  box.innerHTML = '<div class="empty">加载评论中...</div>';
+  var items = [];
+  try {
+    var j = await api('/api/videos/' + id + '/comments?page=1');
+    var d = j.data || {};
+    items = d.items || d.list || [];
+  } catch(e){}
+  var local = store.get('hg_comments_' + id, []);
+  var html = '';
+  items.forEach(function(c){
+    html += commentHtml(c.nickname || c.user_name || '网友', c.time || c.created_at || '', c.content || c.text || '', +c.like_count || 0, false);
+  });
+  local.forEach(function(c){ html += commentHtml(c.name, c.time, c.text, 0, true); });
+  box.innerHTML = html || '<div class="empty">暂无评论，来发第一条吧</div>';
+  var v = findVideo(id);
+  $('#commentTitle').textContent = '评论 · ' + (v.title || '');
+  $('#commentSheet').dataset.vid = id;
+}
+async function postComment(){
+  var inp = $('#commentInput');
+  var text = (inp.value || '').trim();
+  if (!text){ toast('先写点什么'); return; }
+  var id = +($('#commentSheet').dataset.vid || 0);
+  if (!id){ toast('先选一部剧'); return; }
+  var u = store.get('hg_user', null);
+  var name = (u && u.name) || '我';
+  var local = store.get('hg_comments_' + id, []);
+  local.unshift({name: name, time: new Date().toLocaleString(), text: text});
+  store.set('hg_comments_' + id, local);
+  inp.value = '';
+  var posted = false;
+  try {
+    var r = await fetch('/api/up/videos/' + id + '/comments', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({content: text})});
+    posted = r.ok;
+  } catch(e){}
+  toast(posted ? '评论已发布' : '已保存到本地（上游未接受）');
+  loadComments(id);
+}
+/* 1.2.0.4 分享：链接格式 https://hg.45678.eu.org/?v=<id>&ep=<集数>，点开直接播对应集；
+   面板里有复制链接、微信/QQ（复制链接后去对应 App 粘贴）、系统分享和下载 App 入口。 */
+function openShare(id, ep){
+  var v = findVideo(id);
+  var link = SHARE_BASE + '?v=' + id + '&ep=' + (ep || 1);
+  $('#shareLink').textContent = link;
+  $('#shareTitle').textContent = '分享 · ' + (v.title || ('视频 ' + id));
+  $('#shareSheet').hidden = false;
+}
+function closeShare(){ $('#shareSheet').hidden = true; }
+function copyShareLink(){
+  var link = $('#shareLink').textContent;
+  if (navigator.clipboard && navigator.clipboard.writeText){ navigator.clipboard.writeText(link).then(function(){ toast('链接已复制'); }, function(){ toast(link); }); }
+  else toast(link);
+}
+function systemShare(){
+  var link = $('#shareLink').textContent;
+  if (navigator.share){ navigator.share({title: 'HGhub · 短剧', text: $('#shareTitle').textContent, url: link}).catch(function(){}); }
+  else copyShareLink();
+}
+function shareTo(app){
+  copyShareLink();
+  toast('链接已复制，打开' + app + '粘贴发送');
+}
+/* 分享链接直达：打开 ?v=<id>&ep=<集数> 时，首页加载后自动打开对应剧集开始播。 */
+function handleDeepLink(){
+  var q = new URLSearchParams(location.search);
+  var v = q.get('v'), ep = parseInt(q.get('ep') || '1', 10) || 1;
+  if (!v) return;
+  var tries = 0;
+  var timer = setInterval(function(){
+    tries++;
+    var item = feedItems.find(function(x){ return +x.id === +v; });
+    if (item || tries > 20){
+      clearInterval(timer);
+      openDetail(+v);
+      if (ep > 1) setTimeout(function(){ playVideo(+v, ep); }, 800);
+    }
+  }, 500);
+}
+function copyText(t){
+  if (!t){ toast('暂无可复制的内容'); return; }
+  if (navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(t).then(function(){ toast('已复制'); }, function(){ toast(t); });
+  } else { toast(t); }
+}
+/* 1.2.0.5 优选 IP：列表来自 cf.090227.xyz（别人测好的），本站 /api/prefip
+   在服务端拉取并解析（浏览器直接跨域拉会被 CORS 挡住）。
+   格式：纯文本，"IP#CF 电信优选" 逗号或换行分隔；/ct 电信、/cu 联通、/cmcc 移动。
+   App 里由原生代码直接拉 cf.090227.xyz 并用该 IP 建连（SNI 仍是 hg 域名）。 */
+async function loadPrefIp(force){
+  var info = $('#prefIpInfo');
+  try {
+    var isp = store.get('hg_pref_isp', 'auto');
+    var r = await fetch('/api/prefip?isp=' + encodeURIComponent(isp));
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    var j = await r.json();
+    var d = (j && j.data) || {};
+    var ips = d.ips || [];
+    window.HG_PREFIP = ips[0] || '';
+    window.HG_PREFIP_LIST = ips;
+    if (info) info.textContent = ips.length ? ('当前优选 IP：' + ips[0] + '（' + (d.isp || isp) + '，共 ' + ips.length + ' 个）') : '暂无优选 IP，走 Cloudflare 默认节点';
+  } catch(e){
+    if (info) info.textContent = '优选 IP 拉取失败，走 Cloudflare 默认节点';
+  }
+}
+/* 详情页已看过的集：localStorage hg_watched {videoId: [ep...]}，打勾用 */
+function getWatched(id){ var w = store.get('hg_watched', {}); return w[id] || []; }
+function markWatched(id, ep){
+  var w = store.get('hg_watched', {});
+  var list = w[id] || [];
+  if (list.indexOf(ep) === -1){ list.push(ep); w[id] = list; store.set('hg_watched', w); }
+}
+var detailEpRange = 0; /* 当前显示的选集分段起始集号（0 起） */
+var EP_PAGE = 30; /* 每段显示 30 集，集数多时分段，不一次全渲染卡住 */
+function renderEps(){
+  var eps = (curDetail && curDetail.episodes) || [];
+  var box = $('#pEps');
+  var watched = getWatched(curVideo);
+  var total = eps.length;
+  var ranges = $('#dEpRanges');
+  if (total > EP_PAGE){
+    var html = '';
+    for (var st = 0; st < total; st += EP_PAGE){
+      var en = Math.min(total, st + EP_PAGE);
+      html += '<button type="button" data-range="' + st + '" class="' + (detailEpRange === st ? 'on' : '') + '">' + (st + 1) + '-' + en + '集</button>';
+    }
+    ranges.innerHTML = html;
+    ranges.querySelectorAll('button').forEach(function(b){
+      b.onclick = function(){ detailEpRange = +b.getAttribute('data-range'); renderEps(); };
+    });
+  } else { ranges.innerHTML = ''; }
+  var start = detailEpRange;
+  if (start >= total) { detailEpRange = 0; start = 0; }
+  var slice = eps.slice(start, start + EP_PAGE);
+  box.innerHTML = slice.map(function(ep){
+    var watchedCls = watched.indexOf(ep.ep_num) !== -1 ? ' watched' : '';
+    var onCls = ep.ep_num === curEp ? ' on' : '';
+    return '<button type="button" data-ep="' + ep.ep_num + '" class="' + onCls + watchedCls + '">第' + ep.ep_num + '集' + (ep.duration ? ' · ' + fmtDur(ep.duration) : '') + '</button>';
+  }).join('') || '<span class="hint">暂无剧集</span>';
+  $$('#pEps button').forEach(function(b){ b.onclick = function(){ playVideo(curVideo, +b.getAttribute('data-ep')); }; });
+  var tot = $('#dEpTotal');
+  if (tot) tot.textContent = '共 ' + total + ' 集' + (curDetail && curDetail.is_finished ? ' · 已完结' : (total ? ' · 连载中' : ''));
+}
+function showDetailPane(){
+  $('#detailPane').hidden = false;
+  $('#playerPane').hidden = true;
+  var v = $('#video');
+  try { v.pause(); } catch(e){}
+}
+function showPlayerPane(){
+  $('#detailPane').hidden = true;
+  $('#playerPane').hidden = false;
+}
+function renderMe(){
+  var box = $('#meBox');
+  var u = store.get('hg_user', null);
+  var fav = store.get('hg_fav', []);
+  var hist = store.get('hg_history', []);
+  var line = store.get('hg_line', 'direct');
+  var html = '';
+  if (!u){
+    html += '<div class="mebox"><h3>登录 / 注册</h3>' +
+      '<input id="loginUser" placeholder="用户名">' +
+      '<input id="loginPass" type="password" placeholder="密码">' +
+      '<div class="rowbtns"><button class="btn" id="btnLogin">登录</button><button class="btn ghost" id="btnReg">注册</button></div>' +
+      '<p class="hint">本地账号，仅保存在本机浏览器</p></div>';
+  } else {
+    html += '<div class="mebox"><h3>你好，' + esc(u.name) + '</h3>' +
+      '<div class="rowbtns"><button class="btn ghost" id="btnLogout">退出登录</button></div></div>';
+  }
+  html += '<div class="mebox"><h3>我的收藏（' + fav.length + '）</h3>' +
+    (fav.length ? '<div class="grid">' + fav.map(function(v){ return cardHtml(v); }).join('') + '</div>' : '<p class="hint">还没有收藏</p>') + '</div>';
+  html += '<div class="mebox"><h3>观看历史（' + hist.length + '）</h3>' +
+    (hist.length ? hist.map(function(h){
+      return '<div class="rankrow" data-id="' + h.id + '">' + coverImg(h.cover, '', h.title) + '<div><h4>' + esc(h.title || '') + '</h4><p>看到第 ' + (h.ep || 1) + ' 集 · ' + new Date(h.t).toLocaleString() + '</p></div></div>';
+    }).join('') : '<p class="hint">还没有观看记录</p>') + '</div>';
+  html += '<div class="mebox"><h3>设置</h3>' +
+    '<label class="hint">播放线路</label>' +
+    '<select id="lineSel"><option value="direct"' + (line === 'direct' ? ' selected' : '') + '>线路 1：直连 CDN（默认，最快）</option><option value="proxy"' + (line === 'proxy' ? ' selected' : '') + '>线路 2：8080 代理（备用）</option></select>' +
+    '<label class="hint" style="margin-top:10px">优选 IP（用别人测好的 CF 优选 IP，不用自己测）</label>' +
+    '<label class="hint"><input type="checkbox" id="prefIpOn" ' + (store.get('hg_prefip', true) ? 'checked' : '') + '> 开启优选 IP</label>' +
+    '<select id="prefIpIsp"><option value="auto"' + (store.get('hg_pref_isp', 'auto') === 'auto' ? ' selected' : '') + '>自动</option><option value="ct"' + (store.get('hg_pref_isp', 'auto') === 'ct' ? ' selected' : '') + '>电信</option><option value="cu"' + (store.get('hg_pref_isp', 'auto') === 'cu' ? ' selected' : '') + '>联通</option><option value="cmcc"' + (store.get('hg_pref_isp', 'auto') === 'cmcc' ? ' selected' : '') + '>移动</option></select>' +
+    '<p class="hint" id="prefIpInfo">优选 IP 加载中...</p>' +
+    '<div class="rowbtns"><button class="btn ghost" id="btnCopyPrefIp">复制优选 IP</button><button class="btn ghost" id="btnRefreshPrefIp">重新测优选 IP</button></div>' +
+    '<p class="hint">列表来自 cf.090227.xyz（别人测好的优选 IP）。App 里开启后走优选 IP 加载页面；纯网页打开时仍走 Cloudflare 默认节点。</p>' +
+    '<div class="rowbtns"><button class="btn ghost" id="btnClearHist">清空观看历史</button><button class="btn ghost" id="btnClearFav">清空收藏</button></div>' +
+    '<p class="hint">HGhub 复刻版 1.2.0.8 · 自动播放 · 全部内容无限滚动（首页 3361 部）· 评论/分享 · 每 10 分钟自动检查更新 · 详情每次打开重新拉最新集数</p></div>';
+  box.innerHTML = html;
+  bindClicks(box);
+  var bl = $('#btnLogin');
+  if (bl) bl.onclick = function(){
+    var name = $('#loginUser').value.trim(), pw = $('#loginPass').value;
+    var acc = store.get('hg_accounts', {});
+    if (name && acc[name] === hashStr(pw)){ store.set('hg_user', {name: name}); toast('登录成功'); renderMe(); }
+    else toast('账号或密码不正确');
+  };
+  var br = $('#btnReg');
+  if (br) br.onclick = function(){
+    var name = $('#loginUser').value.trim(), pw = $('#loginPass').value;
+    if (!name || pw.length < 4){ toast('用户名不能为空，密码至少 4 位'); return; }
+    var acc = store.get('hg_accounts', {});
+    if (acc[name]){ toast('该用户名已被注册'); return; }
+    acc[name] = hashStr(pw);
+    store.set('hg_accounts', acc);
+    store.set('hg_user', {name: name});
+    toast('注册并登录成功');
+    renderMe();
+  };
+  var bo = $('#btnLogout');
+  if (bo) bo.onclick = function(){ store.set('hg_user', null); toast('已退出'); renderMe(); };
+  var ls = $('#lineSel');
+  if (ls) ls.onchange = function(){ store.set('hg_line', ls.value); toast('已切换为 ' + ls.options[ls.selectedIndex].text); };
+  var pOn = $('#prefIpOn');
+  if (pOn) pOn.onchange = function(){ store.set('hg_prefip', pOn.checked); toast(pOn.checked ? '优选 IP 已开启（下次打开生效）' : '优选 IP 已关闭'); };
+  var pIsp = $('#prefIpIsp');
+  if (pIsp) pIsp.onchange = function(){ store.set('hg_pref_isp', pIsp.value); loadPrefIp(); toast('运营商已切换为 ' + pIsp.options[pIsp.selectedIndex].text); };
+  var pCopy = $('#btnCopyPrefIp');
+  if (pCopy) pCopy.onclick = function(){ copyText(window.HG_PREFIP || ''); };
+  var pRef = $('#btnRefreshPrefIp');
+  if (pRef) pRef.onclick = function(){ loadPrefIp(true); };
+  loadPrefIp();
+  var ch = $('#btnClearHist');
+  if (ch) ch.onclick = function(){ store.set('hg_history', []); toast('已清空观看历史'); renderMe(); };
+  var cf = $('#btnClearFav');
+  if (cf) cf.onclick = function(){ store.set('hg_fav', []); toast('已清空收藏'); renderMe(); };
+}
+function showView(name){
+  /* 1.2.0.5：同页再点先关弹窗再返回（1.2.0.6 改：弹窗开着时同页点导航也要先关弹窗）。
+     底部导航现在有内联 onclick + 监听器两处入口，
+     不加这道闸，点一次会触发 3 次 loadCats/loadCatVideos 并发跑，
+     后完成的那个会把前面已渲染的列表用空结果刷掉（实测：分类点后 0 张卡）。 */
+  /* 1.2.0.6：同页再点也要先关弹窗。以前同页直接 return，详情/播放弹窗开着时
+     点底部导航什么都不发生，看起来像控制中心坏了；现在先关弹窗再回顶部。 */
+  pauseAllSlideVideos(null); activeSlideId = null; /* 1.2.0.7：切页先停掉 feed 正在播的视频，否则播着视频切页后声音/播放还在后台跑，看起来像导航没反应 */
+  if (document.body.getAttribute('data-view') === name){ closePlayer(); window.scrollTo(0, 0); return; }
+  document.body.setAttribute('data-view', name);
+  $$('#bottomNav button').forEach(function(b){ b.classList.toggle('on', b.getAttribute('data-view') === name); });
+  ['home', 'cat', 'rank', 'posts', 'me', 'search'].forEach(function(v){ var el = $('#view-' + v); if (el) el.hidden = (v !== name); });
+  closePlayer();
+  if (name === 'home' && !feedItems.length) loadHome();
+  if (name === 'cat') loadCats();
+  if (name === 'rank') loadRank('hot');
+  if (name === 'posts') loadPosts();
+  if (name === 'me') renderMe();
+  if (name === 'search') loadHotTags();
+  window.scrollTo(0, 0);
+}
+$('#bottomNav').addEventListener('click', function(e){
+  var b = e.target.closest('button[data-view]');
+  if (b) showView(b.getAttribute('data-view'));
+});
+/* 1.2.0.5 兜底：文档级捕获委托。即使上面某处绑定因脚本顺序/手势拦截没挂上，
+   底部导航、搜索按钮、分类/榜单 chip 点了也一定有反应（用户反馈 1.2.0.4 里
+   搜索和底部控制点了没反应；实测根因之一是热门标签接口返回 {word,heat}，
+   旧代码只读 name/keyword/tag，chip 渲染成空白、点了等于没点）。 */
+document.addEventListener('click', function(e){
+  var t = e.target;
+  if (!t || !t.closest) return;
+  /* 注意：底部导航和搜索按钮不在这里处理——它们已有内联 onclick + 直接绑定，
+     再加委托就是第三次触发；showView/doSearch 虽有幂等保护，仍以两处为准。 */
+  var tag = t.closest('#hotTags .chip[data-tag]');
+  if (tag){ $('#q').value = tag.getAttribute('data-tag'); doSearch(tag.getAttribute('data-tag')); return; }
+  var cat = t.closest('#catChips [data-cat]');
+  if (cat){
+    $$('#catChips .chip').forEach(function(x){ x.classList.remove('on'); });
+    cat.classList.add('on');
+    loadCatVideos(cat.getAttribute('data-cat'));
+    return;
+  }
+  var rank = t.closest('#rankTabs .chip[data-type]');
+  if (rank){
+    $$('#rankTabs .chip').forEach(function(x){ x.classList.remove('on'); });
+    rank.classList.add('on');
+    loadRank(rank.getAttribute('data-type'));
+    return;
+  }
+}, true);
+/* 1.2.0.3 页面级无限滚动：分类/搜索/帖子滑到页面底部附近自动加载下一页 */
+window.addEventListener('scroll', function(){
+  if (window.innerHeight + window.scrollY < document.body.scrollHeight - 800) return;
+  if (!$('#view-cat').hidden) loadCatNext();
+  else if (!$('#view-search').hidden) loadSearchNext();
+  else if (!$('#view-posts').hidden) loadPostNext();
+}, {passive: true});
+/* 榜单 chip 点击由文末文档级委托统一处理，这里不再逐个绑 onclick。 */
+$('#btnSearch').onclick = function(){ doSearch($('#q').value); };
+$('#q').addEventListener('keydown', function(e){ if (e.key === 'Enter') doSearch(e.target.value); });
+$('#q').addEventListener('search', function(e){ if (e.target.value.trim()) doSearch(e.target.value); });
+$('#btnClosePlayer').onclick = closePlayer;
+$('#btnBackFeed').onclick = closePlayer;
+$('#btnBackDetail').onclick = function(){ showDetailPane(); renderEps(); };
+$('#btnPlayDetail').onclick = function(){ if (curVideo) playVideo(curVideo, curEp || 1); };
+$('#dCover').onclick = function(){ if (curVideo) playVideo(curVideo, curEp || 1); };
+$('#btnMoreDesc').onclick = function(){
+  var d = $('#pDesc');
+  var clamped = d.classList.toggle('clamped');
+  this.textContent = clamped ? '展开介绍' : '收起介绍';
+};
+$('#dRailFav').onclick = function(){ if (curVideo) toggleFav(findVideo(curVideo)); };
+$('#dRailShare').onclick = function(){ if (curVideo) openShare(curVideo, curEp); };
+$('#dRailComment').onclick = function(){ if (curVideo) openComments(curVideo); };
+$('#btnDFav').onclick = function(){ if (curVideo) toggleFav(findVideo(curVideo)); };
+$('#btnDShare').onclick = function(){ if (curVideo) openShare(curVideo, curEp); };
+$('#btnDComment').onclick = function(){ if (curVideo) openComments(curVideo); };
+$('#speedSel').onchange = function(){ var v = $('#video'); v.playbackRate = parseFloat(this.value); };
+$('#streamSel').onchange = function(){
+  if (curVideo && curStreams){
+    var want = this.value;
+    var src = curStreams[want] || curStreams.main;
+    if (src) setPlayerSource(src);
+  }
+};
+$('#btnFav').onclick = function(){ if (curVideo) toggleFav(findVideo(curVideo)); };
+$('#btnShare').onclick = function(){ if (curVideo) openShare(curVideo, curEp); };
+$('#btnCloseComments').onclick = closeComments;
+$('#btnSendComment').onclick = postComment;
+$('#commentInput').addEventListener('keydown', function(e){ if (e.key === 'Enter') postComment(); });
+$('#btnCloseShare').onclick = closeShare;
+$('#btnCopyLink').onclick = copyShareLink;
+$('#btnShareWechat').onclick = function(){ shareTo('微信'); };
+$('#btnShareQQ').onclick = function(){ shareTo('QQ'); };
+$('#btnSysShare').onclick = systemShare;
+$('#btnDownloadApp').onclick = function(){ location.href = APK_RELEASE_URL; };
+$('#btnPrevEp').onclick = function(){ if (curVideo && curEp > 1) playVideo(curVideo, curEp - 1); };
+$('#btnNextEp').onclick = function(){ if (curVideo) playVideo(curVideo, curEp + 1); };
+$('#video').addEventListener('ended', function(){ if (curVideo){ var total = curDetail && (curDetail.episode_count || curDetail.total_episodes); if (!total || curEp < total) playVideo(curVideo, curEp + 1); } });
+$('#video').addEventListener('timeupdate', function(){ if (Math.floor(this.currentTime) % 5 === 0) saveProgress(); });
+$('#video').addEventListener('pause', saveProgress);
+/* 1.2.0.8：点顶部 logo 直接回首页：停掉视频、关掉弹窗/面板、回到首页 feed 顶部 */
+function goHome(){
+  try { closePlayer(); } catch(e){}
+  try { closeComments(); } catch(e){}
+  try { closeShare(); } catch(e){}
+  showView('home');
+  var f = $('#feed');
+  if (f) f.scrollTo({top: 0, behavior: 'smooth'});
+  window.scrollTo(0, 0);
+}
+$('#btnLogoHome').onclick = goHome;
+loadHotTags();
+loadHome();
+handleDeepLink();
+</script>
+</body>
+</html>
