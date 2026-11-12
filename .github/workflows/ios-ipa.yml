@@ -1,0 +1,51 @@
+name: iOS IPA
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      app_url:
+        description: "IPA 内置的后端地址（留空则首次打开在 App 内填写）"
+        required: false
+        default: ""
+      access_key:
+        description: "后端访问密钥（留空 = 后端未开启鉴权）"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+jobs:
+  unsigned-ipa:
+    # 官方 macOS runner 免费额度：公开仓库不限，私有仓库需计费
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Xcode 版本
+        run: xcodebuild -version
+
+      - name: 构建未签名 IPA
+        env:
+          APP_URL: ${{ github.event.inputs.app_url }}
+          ACCESS_KEY: ${{ github.event.inputs.access_key }}
+        run: bash ios/build-ipa.sh
+
+      - name: 检查 IPA 结构
+        run: |
+          unzip -l dist/HGhub-*.ipa | head -20
+          unzip -p dist/HGhub-*.ipa "Payload/HGhub.app/Info.plist" | plutil -p - | head -20
+          unzip -p dist/HGhub-*.ipa "Payload/HGhub.app/AppConfig.plist" | plutil -p -
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ipa-unsigned
+          path: dist/HGhub-*.ipa
+
+      - name: 上传到 Release（打 tag 时）
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/HGhub-*.ipa

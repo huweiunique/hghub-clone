@@ -1,11 +1,24 @@
-# 密钥、构建产物、本地配置一律不进仓库
-*.jks
-*.keystore
-local.properties
-.gradle/
-**/build/
-.idea/
-*.iml
-__pycache__/
-*.pyc
-android/HGhub-*.apk*
+# 访问密钥（不提交真实 key）
+ios/HGhub/HGhub/AppConfig.plist
+
+# 构建产物
+dist/
+ios/HGhub/build/
+ios/HGhub/build.log
+*.ipa
+*.apk
+build-docker.log
+.test-tmp/
+
+# 截图（本地验证用，体积大）
+shots/
+
+# 测试/调试残留
+cover*.bin
+cover*.jpg
+cover*.enc
+*.out
+list.json
+r.json
+diag.js
+key_for_test.txt

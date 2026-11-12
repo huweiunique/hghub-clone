@@ -1,0 +1,51 @@
+name: Backend tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: 静态 + 离线功能测试
+        run: python tests/run_all.py
+
+      - name: 补丁状态检查
+        run: python tools/apply_local_patches.py --check
+
+      - name: Docker 构建并跑容器健康检查
+        run: |
+          docker build -t hghub:ci .
+          docker run -d --name hghub -p 8081:8081 -p 8080:8080 hghub:ci
+          for i in $(seq 1 30); do
+            curl -fsS http://127.0.0.1:8081/health && break || sleep 2
+          done
+          docker exec hghub openssl version
+          curl -fsS http://127.0.0.1:8080/health
+          docker logs hghub
+
+      - name: 在线功能测试（连真实上游）
+        continue-on-error: true   # 上游抖动（403/超时）不应让 CI 红灯
+        run: |
+          python - <<'PY'
+          import urllib.request, sys
+          try:
+              urllib.request.urlopen("https://huangguoai.com/api/videos?page=1", timeout=10)
+          except Exception as e:
+              print("upstream unreachable, skip online tests:", e)
+              sys.exit(0)
+          PY
+          python tests/run_all.py --online --web http://127.0.0.1:8081 --proxy http://127.0.0.1:8080
+
+      - name: 容器日志（失败时）
+        if: failure()
+        run: docker logs hghub || true

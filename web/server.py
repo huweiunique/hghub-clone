@@ -63,6 +63,13 @@ import urllib.parse
 import urllib.request
 from collections import OrderedDict
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+# ==== HGHUB_LOCAL_PATCH BEGIN (tools/apply_local_patches.py) ====
+
+import sys as _sys
+_sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from local_ext import access_key as _local_auth  # noqa: E402  本地扩展，上游更新不受影响
+LOCAL_EXT_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "local_ext")
+# ==== HGHUB_LOCAL_PATCH END ====
 
 HOST = os.environ.get("HOST", "0.0.0.0")
 PORT = int(os.environ.get("PORT", "8081"))
@@ -202,6 +209,12 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Headers", "Content-Type, x-cdn-auth")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+# ==== HGHUB_LOCAL_PATCH BEGIN (tools/apply_local_patches.py) ====
+
+        for _k, _v in getattr(self, "_local_headers", None) or []:
+            self.send_header(_k, _v)
+        self._local_headers = []
+# ==== HGHUB_LOCAL_PATCH END ====
         self.end_headers()
         if self.command != "HEAD":
             self.wfile.write(body)
@@ -220,6 +233,14 @@ class Handler(BaseHTTPRequestHandler):
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path
         qs = urllib.parse.parse_qs(parsed.query)
+# ==== HGHUB_LOCAL_PATCH BEGIN (tools/apply_local_patches.py) ====
+
+        _st, _body, _ctype, _hdrs = _local_auth.pre_serve(self, "GET")
+        self._local_headers = _hdrs
+        if _st:
+            self._send(_st, _body, _ctype or "application/json")
+            return
+# ==== HGHUB_LOCAL_PATCH END ====
 
         if path in ("/", "/index.html"):
             try:
@@ -228,6 +249,16 @@ class Handler(BaseHTTPRequestHandler):
             except FileNotFoundError:
                 self._json(404, {"status": 0, "msg": "index.html not found"})
             return
+        # ==== HGHUB_LOCAL_PATCH BEGIN (tools/apply_local_patches.py) ====
+        if path.startswith("/local_ext/") and "/" not in path[len("/local_ext/"):]:
+            _f = os.path.join(LOCAL_EXT_DIR, path.rsplit("/", 1)[1])
+            try:
+                with open(_f, "rb") as fh:
+                    self._send(200, fh.read(), "application/javascript; charset=utf-8")
+            except FileNotFoundError:
+                self._json(404, {"status": 0, "msg": "local_ext not found"})
+            return
+        # ==== HGHUB_LOCAL_PATCH END (tools/apply_local_patches.py) ====
         if path == "/hls.min.js":
             # hls.js 本地化（1.2.0.2）：不再依赖 jsdelivr CDN，APK 内也用同一份。
             try:
@@ -285,6 +316,14 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         parsed = urllib.parse.urlparse(self.path)
+# ==== HGHUB_LOCAL_PATCH BEGIN (tools/apply_local_patches.py) ====
+
+        _st, _body, _ctype, _hdrs = _local_auth.pre_serve(self, "POST")
+        self._local_headers = _hdrs
+        if _st:
+            self._send(_st, _body, _ctype or "application/json")
+            return
+# ==== HGHUB_LOCAL_PATCH END ====
         if parsed.path == "/api/play":
             length = int(self.headers.get("Content-Length") or 0)
             body = self.rfile.read(length) if length else b"{}"

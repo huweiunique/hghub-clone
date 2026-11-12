@@ -1,0 +1,17 @@
+.git
+.gitignore
+.github
+android
+ios
+shots
+docs
+.test-tmp
+__pycache__
+**/__pycache__
+*.pyc
+*.apk
+*.ipa
+*.log
+*.out
+*.json.bak
+.manifest.m3u8
