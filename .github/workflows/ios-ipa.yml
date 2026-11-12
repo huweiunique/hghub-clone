@@ -20,7 +20,7 @@ permissions:
 jobs:
   unsigned-ipa:
     # 官方 macOS runner 免费额度：公开仓库不限，私有仓库需计费
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
 
