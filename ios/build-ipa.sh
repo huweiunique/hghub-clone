@@ -39,30 +39,43 @@ PLIST
 # 这里直接把文件放进 Sources 目录并让 pbxproj 用 folder reference 之外的显式引用；
 # 为简单起见，构建后用 cp 放进 .app 里 —— 见下面 Copy Bundle Resources 的替代做法）
 cd "$PROJ_DIR"
+rm -rf "$PROJ_DIR/build" "$PROJ_DIR/build.log"
+mkdir -p "$PROJ_DIR/build"
+
 echo "[ios] xcodebuild archive（未签名）"
 xcodebuild \
-  -project HGhub.xcodeproj \
+  -project "$PROJ_DIR/HGhub.xcodeproj" \
   -scheme "$SCHEME" \
   -configuration Release \
   -sdk iphoneos \
   -destination "generic/platform=iOS" \
-  -archivePath build/HGhub.xcarchive \
+  -archivePath "$PROJ_DIR/build/HGhub.xcarchive" \
   CODE_SIGNING_ALLOWED=NO \
   CODE_SIGNING_REQUIRED=NO \
   CODE_SIGN_IDENTITY="" \
   DEVELOPMENT_TEAM="" \
   ONLY_ACTIVE_ARCH=NO \
-  | tee build.log | tail -40
+  > "$PROJ_DIR/build.log" 2>&1 || {
+    echo "[ios] xcodebuild 失败，最后 60 行：" >&2
+    tail -60 "$PROJ_DIR/build.log" >&2
+    exit 1
+  }
+tail -25 "$PROJ_DIR/build.log"
 
-APP_PATH="build/HGhub.xcarchive/Products/Applications/HGhub.app"
-# Xcode 26 起 archive 里的产品目录可能不同（Products/Applications 之外也有变化），
-# 找不到就在整个 .xcarchive 里搜索，避免依赖写死的路径。
+ARCHIVE="$PROJ_DIR/build/HGhub.xcarchive"
+[ -d "$ARCHIVE" ] || { echo "[ios] archive 没有生成：$ARCHIVE" >&2; exit 1; }
+
+APP_PATH="$ARCHIVE/Products/Applications/HGhub.app"
+# Xcode 26 起 archive 里的产品目录可能有变化，找不到就在整个 .xcarchive 里搜索
 if [ ! -d "$APP_PATH" ]; then
   echo "[ios] 默认路径没有 app，搜索 archive 内容："
-  find build/HGhub.xcarchive -maxdepth 4 -name "*.app" -type d || true
-  APP_PATH="$(find build/HGhub.xcarchive -name "HGhub.app" -type d | head -1)"
+  find "$ARCHIVE" -maxdepth 4 -name "*.app" -type d || true
+  APP_PATH="$(find "$ARCHIVE" -name "HGhub.app" -type d | head -1)"
 fi
-[ -n "$APP_PATH" ] && [ -d "$APP_PATH" ] || { echo "[ios] 归档里没找到 HGhub.app" >&2; exit 1; }
+[ -n "$APP_PATH" ] && [ -d "$APP_PATH" ] || {
+  echo "[ios] 归档里没找到 HGhub.app" >&2
+  exit 1
+}
 echo "[ios] app 路径：$APP_PATH"
 
 # AppConfig.plist 必须在 Bundle 里，AppSettings 才能读到
@@ -70,9 +83,9 @@ cp "$PROJ_DIR/HGhub/AppConfig.plist" "$APP_PATH/AppConfig.plist"
 
 OUT="$ROOT/dist"
 mkdir -p "$OUT"
-rm -rf build/Payload && mkdir -p build/Payload
-cp -R "$APP_PATH" build/Payload/
-(cd build && /usr/bin/zip -qry "$OUT/HGhub-${VERSION}-unsigned.ipa" Payload)
+rm -rf "$PROJ_DIR/build/Payload" && mkdir -p "$PROJ_DIR/build/Payload"
+cp -R "$APP_PATH" "$PROJ_DIR/build/Payload/"
+(cd "$PROJ_DIR/build" && /usr/bin/zip -qry "$OUT/HGhub-${VERSION}-unsigned.ipa" Payload)
 
 echo "[ios] 产物：$OUT/HGhub-${VERSION}-unsigned.ipa"
 ls -lh "$OUT/HGhub-${VERSION}-unsigned.ipa"
