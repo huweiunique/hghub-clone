@@ -37,12 +37,14 @@ jobs:
         run: |
           bash android/build-apk-manual.sh
           ls -lh android/HGhub-*.apk
-          aapt2 dump badging android/HGhub-*.apk | grep -E "package:|sdkVersion|targetSdkVersion|launchable-activity"
 
       - name: 验证 APK 签名与内容
         run: |
-          apksigner verify --verbose android/HGhub-*.apk
-          unzip -l android/HGhub-*.apk | grep -E "classes.dex|assets/hghub/"
+          BT="$ANDROID_HOME/build-tools/34.0.0"
+          APK=$(ls android/HGhub-*.apk)
+          "$BT/aapt2" dump badging "$APK" | grep -E "package:|sdkVersion|targetSdkVersion|launchable-activity"
+          "$BT/apksigner" verify --verbose "$APK"
+          unzip -l "$APK" | grep -E "classes.dex|assets/hghub/"
 
       - uses: actions/upload-artifact@v4
         with:
