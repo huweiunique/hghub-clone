@@ -1,7 +1,7 @@
 # AGENTS.md
 
 HGhub 第三方短剧客户端的复刻版（上游：[vps1986/hghub-clone](https://github.com/vps1986/hghub-clone)，fork 后由本仓库维护）。
-结构：`proxy/`(8080 播放解析代理) + `web/`(8081 网页，同源反代) + `android/`(WebView 壳) + `ios/`(WKWebView 壳，待建)
+结构：`proxy/`(8080 播放解析代理) + `web/`(8081 网页，同源反代) + `android/`(WebView 壳) + `ios/`(WKWebView 壳，CI 打未签名 IPA)
 + `local_ext/`(本地扩展：访问密钥) + `tools/`(补丁/截图) + `tests/`(功能测试) + `Dockerfile`/`docker-compose.yml`。
 
 ## 最重要的一条：不要直接改上游文件
