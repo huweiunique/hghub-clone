@@ -54,8 +54,7 @@ docker build --build-arg APT_MIRROR=deb.debian.org -t hghub:1.2.0.8 .   # 官方
 ## 发布
 
 - **后端**：Docker 镜像（`hghub:<version>`），见 [docs/deploy.md](docs/deploy.md)。
-- **Android**：GitHub Actions 打 APK，产物进 Release。
-- **iOS**：GitHub Actions（macOS runner）打未签名 IPA，产物进 Release。
+- **Release 工作流**（`.github/workflows/release.yml`）：一个 run 出 APK（ubuntu）+ 未签名 IPA（macOS），都进同一个 Release。
 - 打 tag（`v1.2.0.8`）即触发，也可以手动 `workflow_dispatch`。
 - 详细流程与已知限制：[docs/release.md](docs/release.md)。
 

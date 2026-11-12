@@ -7,13 +7,15 @@ git tag -a v1.2.0.8 -m "HGhub 1.2.0.8"
 git push origin v1.2.0.8
 ```
 
-触发三条流水线，产物都进 **GitHub Release**：
+触发 **Release 工作流**（`.github/workflows/release.yml`），一个 run 里两个 job，
+产物都进同一个 **GitHub Release**：
 
-| 流水线 | runner | 产物 | 说明 |
+| job | runner | 产物 | 说明 |
 | --- | --- | --- | --- |
-| `android-apk.yml` | ubuntu | `HGhub-1.2.0.8.apk` | debug 签名，可直接安装 |
-| `ios-ipa.yml` | **macos-15** | `HGhub-1.2.0.8-unsigned.ipa` | 未签名，需重签 |
-| `backend-tests.yml` | ubuntu | — | 离线用例 + Docker 构建 + 容器健康检查 |
+| `apk` | ubuntu-latest | `HGhub-1.2.0.8.apk` | debug 签名，可直接安装 |
+| `ipa` | macos-latest | `HGhub-1.2.0.8-unsigned.ipa` | 未签名，需重签 |
+
+另一条 `backend-tests.yml` 在 push 到 main / PR 时跑，不参与发版。
 
 不想打 tag 时也可以手动跑：Actions → 选工作流 → Run workflow，可填 `app_url` / `access_key`。
 手动跑的产物在 **Artifacts** 里，不进 Release。
@@ -47,12 +49,21 @@ gh workflow run ios-ipa.yml -f app_url="http://<IP>:8081/" -f access_key="<KEY>"
 
 工作流目前只产出**未签名包**（无需任何 Apple 账号），签名环节留给你按需接入。
 
-## macOS runner 说明
+## macOS runner 排队的实际情况（重要）
 
-- **`macos-14` 已于 2026-11-02 从 GitHub Actions 退役**，用它会瞬间被 cancel（本仓库踩过）。
-- 当前用 `macos-15`（arm64）。可用标签见
-  [actions/runner-images](https://github.com/actions/runner-images#available-images)。
-- 公开仓库的 macOS 分钟数免费；私有的按分钟计费，且 macOS 倍率高。
+本仓库实测（2026-11-12）：
+
+- `macos-14`：**已于 2026-11-02 退役**，用它会瞬间被 cancel。
+- `macos-15` / `macos-latest`：有时 45 秒内拿到 runner，有时排队 15 分钟后
+  被取消（`duration_ms: 0`、`runner_name: null`、无日志）。这是 GitHub 侧
+  macOS 容量/账号资格问题，不是工作流写错。
+- 拿到 runner 时，Swift 编译与 `xcodebuild archive` 均通过；第一版只因
+  `NavigationStack` 需要 iOS 16（已把部署目标改为 16）。
+
+**建议**：macOS 队列空闲时重跑 `Release` 工作流即可，IPA 会自动进同一个 Release。
+也可以用自己的 Mac 跑 `bash ios/build-ipa.sh`（本地构建完全一样）。
+
+可用标签见 [actions/runner-images](https://github.com/actions/runner-images#available-images)。
 
 ## 版本号在哪改
 
