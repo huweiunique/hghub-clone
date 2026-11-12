@@ -55,7 +55,15 @@ xcodebuild \
   | tee build.log | tail -40
 
 APP_PATH="build/HGhub.xcarchive/Products/Applications/HGhub.app"
-[ -d "$APP_PATH" ] || { echo "[ios] 归档里没找到 HGhub.app" >&2; exit 1; }
+# Xcode 26 起 archive 里的产品目录可能不同（Products/Applications 之外也有变化），
+# 找不到就在整个 .xcarchive 里搜索，避免依赖写死的路径。
+if [ ! -d "$APP_PATH" ]; then
+  echo "[ios] 默认路径没有 app，搜索 archive 内容："
+  find build/HGhub.xcarchive -maxdepth 4 -name "*.app" -type d || true
+  APP_PATH="$(find build/HGhub.xcarchive -name "HGhub.app" -type d | head -1)"
+fi
+[ -n "$APP_PATH" ] && [ -d "$APP_PATH" ] || { echo "[ios] 归档里没找到 HGhub.app" >&2; exit 1; }
+echo "[ios] app 路径：$APP_PATH"
 
 # AppConfig.plist 必须在 Bundle 里，AppSettings 才能读到
 cp "$PROJ_DIR/HGhub/AppConfig.plist" "$APP_PATH/AppConfig.plist"
