@@ -128,8 +128,19 @@ public class MainActivity extends Activity {
             return url;
         }
         try {
-            android.net.Uri.Builder b = android.net.Uri.parse(url).buildUpon();
-            b.removeQueryParameter("key");
+            // 不依赖 Uri.Builder.removeQueryParameter（API 29+），minSdk 24 兼容
+            android.net.Uri uri = android.net.Uri.parse(url);
+            android.net.Uri.Builder b = uri.buildUpon().encodedQuery(null);
+            String q = uri.getEncodedQuery();
+            if (q != null && !q.isEmpty()) {
+                for (String pair : q.split("&")) {
+                    if (pair.isEmpty()) continue;
+                    String k = android.net.Uri.decode(pair.split("=", 2)[0]);
+                    if ("key".equals(k)) continue;
+                    b.appendEncodedQueryParameter(pair.split("=", 2)[0],
+                            pair.contains("=") ? pair.split("=", 2)[1] : "");
+                }
+            }
             b.appendQueryParameter("key", key);
             return b.build().toString();
         } catch (Exception e) {
