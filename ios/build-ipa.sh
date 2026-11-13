@@ -89,6 +89,10 @@ file "$APP_PATH/HGhub" || true
 # AppConfig.plist 必须在 Bundle 里，AppSettings 才能读到
 cp "$PROJ_DIR/HGhub/AppConfig.plist" "$APP_PATH/AppConfig.plist"
 plutil -p "$APP_PATH/AppConfig.plist"
+[ -s "$APP_PATH/app_settings.js" ] || {
+  echo "[ios] 缺少设置入口脚本 app_settings.js，停止出包" >&2
+  exit 1
+}
 
 # 完整性断言：资源目录编译产物必须存在（AppIcon 缺图片时 actool 不会生成 Assets.car，
 # 装到手机上就是白图标；本仓库踩过）。缺了就 fail，别产出半个包。

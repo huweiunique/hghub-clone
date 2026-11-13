@@ -11,6 +11,7 @@
 		A1000004 /* WebView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000003 /* WebView.swift */; };
 		A1000006 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A1000005 /* Assets.xcassets */; };
 		A1000009 /* AppConfig.plist in Resources */ = {isa = PBXBuildFile; fileRef = A100000A /* AppConfig.plist */; };
+		A100000C /* app_settings.js in Resources */ = {isa = PBXBuildFile; fileRef = A100000B /* app_settings.js */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -20,6 +21,7 @@
 		A1000007 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		A1000008 /* HGhub.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = HGhub.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A100000A /* AppConfig.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = AppConfig.plist; sourceTree = "<group>"; };
+		A100000B /* app_settings.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = ../../local_ext/app_settings.js; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -48,6 +50,7 @@
 				A1000003 /* WebView.swift */,
 				A1000005 /* Assets.xcassets */,
 				A100000A /* AppConfig.plist */,
+				A100000B /* app_settings.js */,
 				A1000007 /* Info.plist */,
 			);
 			path = HGhub;
@@ -122,6 +125,7 @@
 			files = (
 				A1000006 /* Assets.xcassets in Resources */,
 				A1000009 /* AppConfig.plist in Resources */,
+				A100000C /* app_settings.js in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

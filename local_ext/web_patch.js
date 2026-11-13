@@ -16,7 +16,30 @@
   function boot() {
     installStyles();
     trackNavigationHeight();
+    describePlaybackSettings();
     probe();
+  }
+
+  /** 播放方式共用当前后端，界面不暴露 Docker 内部端口。 */
+  function describePlaybackSettings() {
+    var box = document.getElementById('meBox');
+    if (!box) return;
+    function update() {
+      var line = box.querySelector('#lineSel');
+      if (!line) return;
+      var labels = { direct: '直连 CDN（优先）', proxy: '后端代取清单（备用）' };
+      Array.prototype.forEach.call(line.options, function (option) {
+        if (labels[option.value] && option.textContent !== labels[option.value]) option.textContent = labels[option.value];
+      });
+      if (box.querySelector('#__hg_playback_help')) return;
+      var hint = document.createElement('p');
+      hint.id = '__hg_playback_help';
+      hint.className = 'hint';
+      hint.textContent = '两种方式都使用已配置的后端地址和密钥获取列表、搜索结果和播放地址。直连 CDN：手机直接获取播放清单和视频。后端代取清单：由同一后端获取播放清单，视频分片仍可能由手机直接访问 CDN。';
+      line.insertAdjacentElement('afterend', hint);
+    }
+    update();
+    new MutationObserver(update).observe(box, { childList: true, subtree: true });
   }
 
   /** App 壳（WKWebView/Android WebView）里 UA 不含 Safari 字样，用来加仅壳内生效的样式 */
@@ -38,8 +61,6 @@
       /* 行内图标：.ic-svg 默认 display:block，会把简介/统计里的 ★ 挤到单独一行 */
       '.meta .ic-svg,.detail-stats .ic-svg,.card .t p .ic-svg,',
       '.rankrow p .ic-svg,.post .meta .ic-svg{display:inline-block;vertical-align:-2px}',
-      /* App 壳右上角的齿轮浮层会压住“搜索”按钮，给顶栏右侧留出空间 */
-      'body.hg-app header{padding-right:78px}',
       '.search{min-width:0}',
       '.search button{flex-shrink:0}',
       '.btn svg{display:inline-block;width:14px;height:14px;vertical-align:-2px}',
@@ -70,7 +91,9 @@
     var nav = document.querySelector('.bottomnav');
     if (!nav) return;
     function update() {
-      var height = nav.getBoundingClientRect().height + 'px';
+      var measured = nav.getBoundingClientRect().height;
+      if (!measured) return; // 沉浸播放隐藏导航时，保留详情和普通页面的导航高度。
+      var height = measured + 'px';
       document.documentElement.style.setProperty('--hg-nav-height', height);
       // 首页、普通列表、详情和评论/分享面板也共用底栏实际高度。
       document.documentElement.style.setProperty('--bottomnav-h', height);

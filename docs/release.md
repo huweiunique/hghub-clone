@@ -27,7 +27,7 @@ git push origin v1.2.0.8
 | 客户端 | 设置入口 | 构建时注入 |
 | --- | --- | --- |
 | APK | 首次打开的设置页（地址 + 密钥），可清除后重填 | `APP_URL` / `APP_ACCESS_KEY`（Gradle：`-PappUrl` / `-PappAccessKey`） |
-| IPA | 右上角齿轮：地址、密钥、「测试连接」、恢复内置配置 | `APP_URL` / `ACCESS_KEY` → 写入 `AppConfig.plist` |
+| IPA | 我的 → 设置：修改服务地址、可选密钥、测试连接 | 仅 `APP_URL` 写入 `AppConfig.plist`；密钥不参与构建 |
 
 密钥最终以 `?key=` 附加到入口 URL，后端据此下发 Cookie，之后请求自动带上。
 

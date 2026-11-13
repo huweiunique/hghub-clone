@@ -198,9 +198,9 @@ class LocalPatchTests(unittest.TestCase):
         # 不能依赖 hg_key_ok_* 本地标记：Cookie 有效时就不该弹框
         self.assertNotIn("hg_key_ok_", js)
         self.assertIn("localStorage.removeItem('hg_need_key')", js)
-        # 行内 ★ 不再另起一行；App 壳顶栏给齿轮留空间
+        # 行内 ★ 不再另起一行；取消悬浮齿轮后顶栏无需额外留空
         self.assertIn(".ic-svg{display:inline-block", js)
-        self.assertIn("body.hg-app header{padding-right:78px}", js)
+        self.assertNotIn("body.hg-app header{padding-right:78px}", js)
 
 
 class ClientConfigTests(unittest.TestCase):

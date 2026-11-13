@@ -26,8 +26,10 @@ BEGIN = "HGHUB_LOCAL_PATCH BEGIN (tools/apply_local_patches.py)"
 END = "HGHUB_LOCAL_PATCH END"
 
 
-def _marker(rel_path, which):
+def _marker(rel_path, which, syntax=None):
     """按文件类型返回合法注释形式的标记行（不含缩进）。"""
+    if syntax == "js":
+        return f"/* ==== HGHUB_LOCAL_PATCH {which} ==== */"
     if rel_path.endswith(".py"):
         return f"# ==== HGHUB_LOCAL_PATCH {which} (tools/apply_local_patches.py) ===="
     if rel_path.endswith((".html", ".htm")):
@@ -46,10 +48,10 @@ def _marker_block(rel_path, insert):
 PATCHES = {}
 
 
-def patch(rel_path, name, anchor, insert, where="after"):
+def patch(rel_path, name, anchor, insert, where="after", syntax=None):
     """注册一个补丁：在 anchor 出现处之后/之前插入 insert（若尚未插入）。"""
     PATCHES.setdefault(rel_path, []).append(
-        {"name": name, "anchor": anchor, "insert": insert, "where": where})
+        {"name": name, "anchor": anchor, "insert": insert, "where": where, "syntax": syntax})
 
 
 # ---------------------------------------------------------------------------
@@ -141,6 +143,15 @@ patch(
 
 
 # ---------------------------------------------------------------------------
+# 播放增强在上游脚本之后加载，复用其播放器、进度与历史存储。
+for _page in ("web/index.html", "android/app/src/main/assets/hghub/index.html"):
+    patch(_page, "player enhancements", "</body>",
+          '<script src="/local_ext/player_patch.js"></script>\n',
+          where="before-anchor-line")
+    patch(_page, "managed resume", '    if (prog && prog.ep === curEp && prog.t > 10 && prog.dur && prog.t < prog.dur - 10){',
+          'if (window.__hgResumeManaged) return; // 本地扩展使用媒体就绪事件恢复，避免旧定时器串集。\n',
+          where="before-anchor-line", syntax="js")
+
 # 应用逻辑
 # ---------------------------------------------------------------------------
 BEGIN_RE = re.compile(r"^[ \t]*(?:#|/\*|<!--).*?"
@@ -215,10 +226,10 @@ def apply_one(text, spec, rel_path):
         indent = re.match(r"[ \t]*", text[start:]).group(0)
         marker = indent
         body = indent + "    "
-        lines = [indent + _marker(rel_path, "BEGIN")]
+        lines = [indent + _marker(rel_path, "BEGIN", spec.get("syntax"))]
         for ln in spec["insert"].strip("\n").split("\n"):
             lines.append(((indent + ln) if ln.strip() else ln))
-        lines.append(indent + _marker(rel_path, "END"))
+        lines.append(indent + _marker(rel_path, "END", spec.get("syntax")))
         return text[:start] + "\n".join(lines) + "\n" + text[start:], "applied"
 
     idx = text.index(anchor) + len(anchor)

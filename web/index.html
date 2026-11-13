@@ -1168,6 +1168,9 @@ async function playVideo(id, ep){
     preloadPlay(id, curEp + 1); /* 边播边预加载下一集 */
     /* 续播：上次看到一半，自动跳回上次位置 */
     var prog = getProgress(id);
+    /* ==== HGHUB_LOCAL_PATCH BEGIN ==== */
+    if (window.__hgResumeManaged) return; // 本地扩展使用媒体就绪事件恢复，避免旧定时器串集。
+    /* ==== HGHUB_LOCAL_PATCH END ==== */
     if (prog && prog.ep === curEp && prog.t > 10 && prog.dur && prog.t < prog.dur - 10){
       var _trySeek = function(){ try { v.currentTime = prog.t; } catch(e){} };
       v.addEventListener('loadedmetadata', _trySeek, {once: true});
@@ -1584,5 +1587,8 @@ loadHotTags();
 loadHome();
 handleDeepLink();
 </script>
+<!-- HGhub local patch begin (tools/apply_local_patches.py) -->
+<script src="/local_ext/player_patch.js"></script>
+<!-- HGhub local patch end (tools/apply_local_patches.py) -->
 </body>
 </html>

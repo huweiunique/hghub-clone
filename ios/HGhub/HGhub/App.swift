@@ -8,7 +8,6 @@ struct HGhubApp: App {
         WindowGroup {
             ContentView(settings: settings)
                 .preferredColorScheme(.dark)
-                .statusBarHidden(false)
         }
     }
 }
@@ -59,14 +58,22 @@ final class AppSettings: ObservableObject {
 
     /// 拼出带密钥的入口地址（首页用 ?key= 换 Cookie，之后所有请求凭 Cookie）
     var entryURL: URL? {
-        guard !appURL.isEmpty, var comps = URLComponents(string: appURL) else { return nil }
-        let key = normalizedAccessKey
+        Self.makeEntryURL(address: appURL, key: normalizedAccessKey)
+    }
+
+    static func makeEntryURL(address: String, key: String) -> URL? {
+        guard var comps = URLComponents(string: address.trimmingCharacters(in: .whitespacesAndNewlines)),
+              ["http", "https"].contains(comps.scheme?.lowercased() ?? ""),
+              let host = comps.host, !host.isEmpty, comps.user == nil, comps.password == nil else { return nil }
+        comps.scheme = comps.scheme?.lowercased()
+        comps.host = host.lowercased()
+        // 密钥统一从独立配置项读取，避免 URL 中残留旧 key。
+        var q = (comps.queryItems ?? []).filter { $0.name != "key" }
+        let key = key.trimmingCharacters(in: .whitespacesAndNewlines)
         if !key.isEmpty {
-            var q = comps.queryItems ?? []
-            q.removeAll { $0.name == "key" }
             q.append(URLQueryItem(name: "key", value: key))
-            comps.queryItems = q
         }
+        comps.queryItems = q.isEmpty ? nil : q
         return comps.url
     }
 }

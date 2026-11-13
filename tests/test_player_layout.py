@@ -15,7 +15,7 @@ sys.path.insert(0, str(ROOT / "tools"))
 from shot import WS, find_chrome, free_port
 
 
-class PlayerLayoutTests(unittest.TestCase):
+class BrowserFixture(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         try:
@@ -62,6 +62,8 @@ class PlayerLayoutTests(unittest.TestCase):
         cls.ws.call("Page.setDocumentContent", {"frameId": frame, "html": html})
         cls.evaluate("window.fetch = async () => ({status:200});")
         cls.evaluate((ROOT / "local_ext/web_patch.js").read_text(encoding="utf-8"))
+        if getattr(cls, 'load_player_patch', True) and (ROOT / 'local_ext/player_patch.js').exists():
+            cls.evaluate((ROOT / 'local_ext/player_patch.js').read_text(encoding='utf-8'))
         cls.evaluate("document.body.classList.add('modal-open'); document.querySelector('#player').hidden=false; document.querySelector('#detailPane').hidden=true; document.querySelector('#playerPane').hidden=false;")
         cls.set_video_size(360, 640)
 
@@ -103,6 +105,7 @@ class PlayerLayoutTests(unittest.TestCase):
             raise AssertionError(r["exceptionDetails"])
         return r["result"].get("value")
 
+class PlayerLayoutTests(BrowserFixture):
     def measure(self, width, height):
         self.ws.call("Emulation.setDeviceMetricsOverride", {"width": width, "height": height, "deviceScaleFactor": 1, "mobile": True})
         return self.evaluate("""(async () => {
@@ -118,17 +121,118 @@ class PlayerLayoutTests(unittest.TestCase):
             with self.subTest(viewport=(width, height)):
                 m = self.measure(width, height)
                 v, ctl = m["video"], m["controls"]
-                available = m["nav"]["y"] - m["back"]["bottom"] - ctl["h"]
-                self.assertGreater(v["h"], available - 40, m)
-                self.assertLessEqual(v["bottom"], ctl["y"] + 1, m)
-                self.assertLessEqual(ctl["bottom"], m["nav"]["y"], m)
+                self.assertEqual(v["h"], height, m)
+                self.assertEqual(v["w"], width, m)
+                self.assertEqual(m["nav"]["h"], 0, m)
+                self.assertLessEqual(ctl["bottom"], height, m)
                 self.assertFalse(m["overflow"], m)
                 self.assertEqual(m["viewport"], width, m)
                 self.assertEqual(m["fit"], "contain")
                 for b in m["buttons"]:
                     self.assertGreaterEqual(b["x"], 0, m)
                     self.assertLessEqual(b["right"], width, m)
-                    self.assertLessEqual(b["bottom"], m["nav"]["y"], m)
+                    self.assertLessEqual(b["bottom"], height, m)
+
+    def test_immersive_player_reuses_native_controls_and_fills_viewport(self):
+        self.measure(430, 932)
+        result = self.evaluate("""({nav:getComputedStyle(document.querySelector('.bottomnav')).display,
+          width:document.querySelector('#video').getBoundingClientRect().width,
+          height:document.querySelector('#video').getBoundingClientRect().height,
+          controls:document.querySelector('#video').controls,
+          rotate:!!document.querySelector('#hgRotate')})""")
+        self.assertEqual(result['nav'], 'none', result)
+        self.assertEqual(result['width'], 430, result)
+        self.assertEqual(result['height'], 932, result)
+        self.assertTrue(result['controls'], result)
+        self.assertTrue(result['rotate'], result)
+
+    def test_search_header_has_no_gap_above_scrolled_content(self):
+        self.evaluate("document.querySelector('#player').hidden=true;document.body.classList.remove('modal-open')")
+        try:
+            self.measure(375, 667)
+            self.assertEqual(self.evaluate("document.querySelector('header').getBoundingClientRect().top"), 0)
+        finally:
+            self.evaluate("document.querySelector('#player').hidden=false;document.body.classList.add('modal-open')")
+
+    def test_rotation_is_manual_and_resets_when_returning_to_detail(self):
+        self.measure(430, 932)
+        self.evaluate("document.querySelector('#hgRotate').click()")
+        rotated = self.evaluate("""(() => {
+          const r=document.querySelector('#video').getBoundingClientRect();
+          return {x:r.x,y:r.y,w:r.width,h:r.height,landscape:document.body.classList.contains('hg-landscape'),
+            logicalWidth:document.querySelector('#video').clientWidth};
+        })()""")
+        self.assertEqual(rotated, {'x': 0, 'y': 0, 'w': 430, 'h': 932, 'landscape': True, 'logicalWidth': 932})
+        self.measure(932, 430)
+        self.assertTrue(self.evaluate("document.body.classList.contains('hg-landscape')"))
+        self.evaluate("document.querySelector('#playerPane').hidden=true; document.querySelector('#detailPane').hidden=false")
+        self.measure(430, 932)
+        self.assertFalse(self.evaluate("document.body.classList.contains('hg-landscape')"))
+        self.assertGreater(self.evaluate("document.querySelector('.bottomnav').getBoundingClientRect().height"), 0)
+        self.evaluate("document.querySelector('#playerPane').hidden=false;document.querySelector('#detailPane').hidden=true")
+
+    def test_playing_controls_hide_and_reappear_without_replacing_native_fullscreen(self):
+        self.evaluate("document.querySelector('#video').dispatchEvent(new Event('play'))")
+        self.assertTrue(self.evaluate("document.querySelector('#video').controls"))
+        hidden = self.evaluate("""(async()=>{
+          await new Promise(r=>setTimeout(r,3200));
+          return getComputedStyle(document.querySelector('#btnBackDetail')).visibility;
+        })()""")
+        self.assertEqual(hidden, 'hidden')
+        self.evaluate("document.querySelector('#playerPane').dispatchEvent(new Event('pointerdown'))")
+        self.assertEqual(self.evaluate("getComputedStyle(document.querySelector('#btnBackDetail')).visibility"), 'visible')
+
+    def test_app_settings_survives_me_rerender_and_opens_native_config(self):
+        script = (ROOT / 'local_ext/app_settings.js').read_text(encoding='utf-8')
+        original = self.evaluate("document.querySelector('#meBox').innerHTML")
+        self.evaluate("""
+          window.HGAppConfig={address:'https://example.test/'+'a'.repeat(140)+'?x=<img>',hasKey:true};
+          window.__settingsMessages=[];
+          window.webkit={messageHandlers:{hgSettings:{postMessage:m=>window.__settingsMessages.push(m)}}};
+          document.querySelector('#meBox').innerHTML='<div class="mebox"><h3>设置</h3><label>播放线路</label><select id="lineSel"><option value="direct">直连 CDN</option><option value="proxy" selected>8080 代理</option></select></div>';
+        """)
+        self.evaluate(script)
+        try:
+            for has_key in [True, False]:
+                self.evaluate("window.HGAppConfig.hasKey=" + json.dumps(has_key))
+                # 模拟登录、收藏、历史操作导致 renderMe 完整重绘。
+                self.evaluate("document.querySelector('#meBox').innerHTML='<div class=\"mebox\"><h3>设置</h3><label>播放线路</label><select id=\"lineSel\"><option value=\"direct\">直连 CDN</option><option value=\"proxy\" selected>8080 代理</option></select></div>'")
+                result = self.evaluate("""(async()=>{
+                  await new Promise(r=>setTimeout(r,0));
+                  const section=document.querySelector('#__hg_app_settings');
+                  section.querySelector('button').click();
+                  return {count:document.querySelectorAll('#__hg_app_settings').length,
+                    text:section.textContent,images:section.querySelectorAll('img').length,
+                    options:[...document.querySelector('#lineSel').options].map(o=>o.value),
+                    selected:document.querySelector('#lineSel').value,
+                    collapsed:!document.querySelector('#__hg_playback_fallback').open,
+                    configFirst:!!(section.compareDocumentPosition(document.querySelector('#__hg_playback_fallback')) & Node.DOCUMENT_POSITION_FOLLOWING),
+                    inside:section.closest('.mebox').contains(document.querySelector('#lineSel')),
+                    messages:window.__settingsMessages};
+                })()""")
+                self.assertEqual(result['count'], 1, result)
+                self.assertEqual(result['images'], 0, result)
+                self.assertEqual(result['options'], ['direct', 'proxy'], result)
+                self.assertEqual(result['selected'], 'proxy', result)
+                self.assertTrue(result['collapsed'], result)
+                self.assertTrue(result['configFirst'], result)
+                self.assertTrue(result['inside'], result)
+                self.assertEqual(result['messages'][-1], 'open', result)
+                self.assertIn('已配置' if has_key else '未配置（可选）', result['text'])
+            self.evaluate("document.querySelector('#lineSel').value='direct'; document.querySelector('#lineSel').dispatchEvent(new Event('change'))")
+            self.assertIn('直连 CDN', self.evaluate("document.querySelector('#__hg_playback_fallback summary').textContent"))
+            self.evaluate("document.body.insertAdjacentHTML('beforeend','<div id=\"__hg_key_box\"><div></div></div>')")
+            recovery = self.evaluate("""(async()=>{
+              await new Promise(r=>setTimeout(r,0));
+              const button=document.querySelector('#__hg_key_box [data-hg-settings]');
+              button.click();
+              return {count:document.querySelectorAll('#__hg_key_box [data-hg-settings]').length,
+                message:window.__settingsMessages.at(-1)};
+            })()""")
+            self.assertEqual(recovery, {'count': 1, 'message': 'open'})
+        finally:
+            self.evaluate("document.querySelector('#__hg_key_box')?.remove()")
+            self.evaluate("delete window.HGAppConfig; delete window.webkit; document.querySelector('#meBox').innerHTML=" + json.dumps(original))
 
     def test_larger_screen_and_nav_resize_change_player_space(self):
         small = self.measure(375, 667)["video"]
@@ -138,8 +242,8 @@ class PlayerLayoutTests(unittest.TestCase):
         self.evaluate("document.querySelector('.bottomnav').style.paddingBottom='60px'")
         try:
             resized = self.measure(1024, 1366)
-            self.assertLess(resized["video"]["h"], large["h"] - 40, resized)
-            self.assertLessEqual(resized["controls"]["bottom"], resized["nav"]["y"])
+            self.assertEqual(resized["video"]["h"], large["h"], resized)
+            self.assertLessEqual(resized["controls"]["bottom"], 1366)
         finally:
             self.evaluate("document.querySelector('.bottomnav').style.paddingBottom=''")
 
@@ -148,8 +252,8 @@ class PlayerLayoutTests(unittest.TestCase):
         try:
             m = self.measure(932, 430)
             self.assertGreater(m["video"]["w"], 900)
-            self.assertLessEqual(m["video"]["bottom"], m["controls"]["y"])
-            self.assertLessEqual(m["controls"]["bottom"], m["nav"]["y"])
+            self.assertEqual(m["video"]["bottom"], 430)
+            self.assertLessEqual(m["controls"]["bottom"], 430)
             self.evaluate("document.querySelector('#playerPane').hidden=true; document.querySelector('#detailPane').hidden=false")
             self.measure(1024, 1366)
             detail = self.evaluate("({hidden:getComputedStyle(document.querySelector('#playerPane')).display, max:getComputedStyle(document.querySelector('#player .box')).maxWidth, overflow:getComputedStyle(document.querySelector('#player')).overflowY})")
@@ -188,7 +292,7 @@ class PlayerLayoutTests(unittest.TestCase):
                         })()""")
                         self.assertEqual(m['vw'],width,m)
                         self.assertLessEqual(m['sw'],width,m)
-                        self.assertLessEqual(m['searchRight'],width-78+1,m)
+                        self.assertLessEqual(m['searchRight'],width-12+1,m)
                         if view=='home':
                             self.assertLessEqual(m['feedBottom'],m['navTop']+1,m)
                             self.assertGreater(m['feedBottom'],m['navTop']-2,m)
