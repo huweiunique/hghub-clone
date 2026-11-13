@@ -207,7 +207,8 @@ struct WebView: UIViewRepresentable {
            let script = try? String(contentsOfFile: path, encoding: .utf8),
            var address = URLComponents(url: url, resolvingAgainstBaseURL: false) {
             address.queryItems = address.queryItems?.filter { $0.name != "key" }
-            let summary: [String: Any] = ["address": address.string ?? "", "hasKey": hasKey]
+            let summary: [String: Any] = ["address": address.string ?? "", "hasKey": hasKey,
+                                         "preferredIPSupported": context.coordinator.preferredIP.supported]
             if let data = try? JSONSerialization.data(withJSONObject: summary),
                let json = String(data: data, encoding: .utf8) {
                 let preferredScript = Bundle.main.path(forResource: "prefip_patch", ofType: "js")
@@ -275,9 +276,9 @@ struct WebView: UIViewRepresentable {
         func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage,
                                    replyHandler: @escaping (Any?, String?) -> Void) {
             let origin = message.frameInfo.securityOrigin
-            guard message.name == "hgPreferredIP", message.frameInfo.isMainFrame,
-                  origin.protocol == url.scheme, origin.host == url.host,
-                  origin.port == (url.port ?? (url.scheme == "https" ? 443 : 80)),
+            guard message.name == "hgPreferredIP",
+                  WebBridgeOrigin.allows(scheme: origin.protocol, host: origin.host, port: origin.port,
+                                         isMainFrame: message.frameInfo.isMainFrame, backend: url),
                   let body = message.body as? [String: Any] else {
                 replyHandler(nil, "不允许此页面访问优选配置"); return
             }
@@ -289,10 +290,8 @@ struct WebView: UIViewRepresentable {
 
         func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
             let origin = message.frameInfo.securityOrigin
-            let port = url.port ?? (url.scheme == "https" ? 443 : 80)
-            guard message.frameInfo.isMainFrame,
-                  origin.protocol == url.scheme, origin.host == url.host,
-                  (origin.port == 0 ? (origin.protocol == "https" ? 443 : 80) : origin.port) == port else { return }
+            guard WebBridgeOrigin.allows(scheme: origin.protocol, host: origin.host, port: origin.port,
+                                         isMainFrame: message.frameInfo.isMainFrame, backend: url) else { return }
             if message.name == "hgSettings", message.body as? String == "open" { onSettings() }
             if message.name == "hgPlayer", let active = message.body as? Bool { onPlayerState(active) }
         }

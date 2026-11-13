@@ -85,6 +85,7 @@ class PreferredIPBrowserTests(BrowserFixture):
     def setUp(self):
         self.evaluate("""
           localStorage.clear();window.__hgPreferredIPInstalled=false;delete window.webkit;
+          delete window.__hgPreferredIPVersion;delete window.HGAppConfig;
           window.loadPrefIp=async()=>{};
           window.requests=[];
           window.fetch=async url=>{requests.push(String(url));return {ok:true,json:async()=>({status:1,data:{ips:['192.0.2.1']}})}};
@@ -132,6 +133,49 @@ class PreferredIPBrowserTests(BrowserFixture):
             for selector in ['#hgPrefMode', '#hgPrefSave', '#prefIpInfo', '#btnRefreshPrefIp']:
                 self.assertEqual(self.evaluate(f"document.querySelector('{selector}').getBoundingClientRect().height"), 0)
             self.evaluate('renderMe();Promise.resolve()')
+
+    def test_supported_ios_bridge_failure_is_visible_and_retryable(self):
+        self.evaluate("""
+          window.HGAppConfig={preferredIPSupported:true};
+          window.webkit={messageHandlers:{hgPreferredIP:{postMessage:async()=>{throw new Error('不允许此页面访问优选配置')}}}};
+        """)
+        self.install()
+        self.assertFalse(self.evaluate("document.querySelector('#hgPrefSection').hidden"))
+        self.assertIn('不允许此页面', self.evaluate("document.querySelector('#prefIpInfo').textContent"))
+        self.assertIsNotNone(self.evaluate("document.querySelector('#hgPrefRetry')?.textContent"))
+        self.evaluate("window.webkit.messageHandlers.hgPreferredIP.postMessage=async()=>({supported:true,mode:'auto',isp:'ct',customIPs:[],results:[],message:'读取成功'});document.querySelector('#hgPrefRetry').click();Promise.resolve()")
+        self.assertFalse(self.evaluate("document.querySelector('#hgPrefSection').hidden"))
+        self.assertTrue(self.evaluate("document.querySelector('#hgPrefRetry').hidden"))
+        self.assertFalse(self.evaluate("document.querySelector('#hgPrefSave').disabled"))
+
+    def test_known_unsupported_ios_stays_hidden_even_when_bridge_fails(self):
+        self.evaluate("""
+          window.HGAppConfig={preferredIPSupported:false};
+          window.webkit={messageHandlers:{hgPreferredIP:{postMessage:async()=>{throw new Error('读取失败')}}}};
+        """)
+        self.install()
+        self.assertTrue(self.evaluate("document.querySelector('#hgPrefSection').hidden"))
+
+    def test_bundled_patch_can_replace_an_older_server_patch(self):
+        self.evaluate("""
+          window.__hgPreferredIPInstalled=true;
+          window.HGAppConfig={preferredIPSupported:true};
+          window.nativeRequests=[];
+          window.webkit={messageHandlers:{hgPreferredIP:{postMessage:async body=>{
+            nativeRequests.push(body.action);
+            return {supported:true,mode:'auto',isp:'ct',customIPs:[],results:[],message:'可用'};
+          }}}};
+        """)
+        self.install()
+        self.assertIsNotNone(self.evaluate("document.querySelector('#hgPrefMode')?.value"))
+        self.evaluate("""
+          delete window.__hgPreferredIPVersion;
+          document.querySelector('#hgPrefSave').onclick=()=>{throw new Error('旧脚本处理器不应继续使用')};
+        """)
+        self.install()
+        self.evaluate("document.querySelector('#hgPrefSave').click();Promise.resolve()")
+        self.assertFalse(self.evaluate("document.querySelector('#hgPrefSection').hidden"))
+        self.assertEqual(self.evaluate('nativeRequests.at(-1)'), 'save')
 
     def test_results_show_fastest_choice_failures_and_average_timings(self):
         self.evaluate("""

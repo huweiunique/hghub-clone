@@ -1,14 +1,20 @@
 /* CF 设置：复用上游设置区域；iOS 随包分发，普通网页只修正列表刷新。 */
 (function () {
   'use strict';
-  if (window.__hgPreferredIPInstalled) return;
+  if (window.__hgPreferredIPVersion >= 2) return;
+  var upgrading = !!window.__hgPreferredIPInstalled;
   window.__hgPreferredIPInstalled = true;
+  window.__hgPreferredIPVersion = 2;
   var bridge = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.hgPreferredIP;
   var state = null;
   var busy = false;
   var requestID = 0;
   var dirty = false;
   var $ = function (id) { return document.getElementById(id); };
+  function capability() {
+    var config = window.HGAppConfig;
+    return config && typeof config.preferredIPSupported === 'boolean' ? config.preferredIPSupported : null;
+  }
 
   function show(text) {
     if ($('prefIpInfo')) $('prefIpInfo').textContent = text;
@@ -17,7 +23,7 @@
   function setBusy(value, text) {
     busy = value;
     ['btnRefreshPrefIp', 'hgPrefSave', 'hgPrefTest', 'hgPrefMode', 'hgPrefCustom', 'prefIpIsp'].forEach(function (id) {
-      if ($(id)) $(id).disabled = value || !!(bridge && state && !state.supported);
+      if ($(id)) $(id).disabled = value || !!(bridge && (!state || !state.supported));
     });
     if ($('hgPrefCancel')) $('hgPrefCancel').hidden = !value;
     if ($('btnRefreshPrefIp')) {
@@ -31,7 +37,8 @@
 
   function display(result) {
     state = result;
-    if ($('hgPrefSection')) $('hgPrefSection').hidden = !result.supported;
+    if ($('hgPrefSection')) $('hgPrefSection').hidden = capability() === false || !result.supported;
+    if ($('hgPrefRetry')) $('hgPrefRetry').hidden = true;
     window.HG_PREFIP = result.selectedIP || '';
     window.HG_PREFIP_LIST = (result.results || []).map(function (r) { return r.ip; });
     if ($('hgPrefMode')) $('hgPrefMode').value = result.mode;
@@ -103,6 +110,8 @@
       dirty = false;
       display(result);
     } catch (error) {
+      if ($('hgPrefSection')) $('hgPrefSection').hidden = capability() === false;
+      if ($('hgPrefRetry')) $('hgPrefRetry').hidden = false;
       show((error && error.message) || String(error));
     } finally { clearInterval(poll); ++requestID; setBusy(false); }
   }
@@ -161,6 +170,10 @@
       info.insertAdjacentElement('beforebegin', buttons);
       var results = document.createElement('div'); results.id = 'hgPrefResults';
       info.insertAdjacentElement('afterend', results);
+      var retry = document.createElement('button'); retry.id = 'hgPrefRetry';
+      retry.className = 'btn ghost'; retry.textContent = '重试读取优选设置'; retry.hidden = true;
+      retry.onclick = function () { window.loadPrefIp(); };
+      info.insertAdjacentElement('afterend', retry);
       $('hgPrefMode').onchange = function () {
         dirty = true; draftVisibility(); setBusy(false); show('配置尚未保存，请点“保存并测速择优”');
       };
@@ -215,5 +228,6 @@
       if (id === requestID) setBusy(false);
     }
   };
-  if ($('prefIpInfo')) window.loadPrefIp();
+  if (upgrading && $('hgPrefSection') && typeof window.renderMe === 'function') window.renderMe();
+  else if ($('prefIpInfo')) window.loadPrefIp();
 })();

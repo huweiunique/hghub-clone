@@ -44,7 +44,19 @@ Task { @MainActor in
     })
     defer { controller.stop() }
     do {
-        if scenario == "cancel" {
+        if scenario == "bridge-origin" {
+            let secure = URL(string: "https://fixture.invalid/")!
+            let plain = URL(string: "http://fixture.invalid/")!
+            let custom = URL(string: "https://fixture.invalid:8443/")!
+            try require(WebBridgeOrigin.allows(scheme: "https", host: "fixture.invalid", port: 0, isMainFrame: true, backend: secure), "HTTPS 默认端口0必须可用")
+            try require(WebBridgeOrigin.allows(scheme: "https", host: "fixture.invalid", port: 443, isMainFrame: true, backend: secure), "HTTPS显式443必须可用")
+            try require(WebBridgeOrigin.allows(scheme: "http", host: "fixture.invalid", port: 0, isMainFrame: true, backend: plain), "HTTP默认端口0必须可用")
+            try require(WebBridgeOrigin.allows(scheme: "https", host: "fixture.invalid", port: 8443, isMainFrame: true, backend: custom), "自定义端口必须精确匹配")
+            try require(!WebBridgeOrigin.allows(scheme: "https", host: "fixture.invalid", port: 0, isMainFrame: true, backend: custom), "默认端口不能放行到8443")
+            try require(!WebBridgeOrigin.allows(scheme: "https", host: "other.invalid", port: 0, isMainFrame: true, backend: secure), "不同域名不能放行")
+            try require(!WebBridgeOrigin.allows(scheme: "http", host: "fixture.invalid", port: 0, isMainFrame: true, backend: secure), "不同协议不能放行")
+            try require(!WebBridgeOrigin.allows(scheme: "https", host: "fixture.invalid", port: 0, isMainFrame: false, backend: secure), "子框架不能放行")
+        } else if scenario == "cancel" {
             let running = Task { try await controller.handle(["action":"save", "mode":"auto", "isp":"ct", "customIPs":"192.0.2.4"]) }
             while !(controller.snapshot()["running"] as? Bool ?? false) { await Task.yield() }
             _ = try await controller.handle(["action":"cancel"])
@@ -104,6 +116,7 @@ class PreferredIPRankingTests(unittest.TestCase):
         sources = ROOT / 'ios/HGhub/HGhub'
         build = subprocess.run(['swiftc', '-target', platform.machine() + '-apple-macos14.0',
                                 str(sources / 'PreferredIP.swift'), str(sources / 'PreferredIPRanking.swift'),
+                                str(sources / 'WebBridgeOrigin.swift'),
                                 str(folder / 'main.swift'), '-o', cls.binary], capture_output=True, text=True, timeout=60)
         if build.returncode:
             raise AssertionError(build.stderr)
@@ -126,6 +139,9 @@ class PreferredIPRankingTests(unittest.TestCase):
 
     def test_invalid_custom_input_is_rejected_before_measurement(self):
         self.run_scenario('invalid')
+
+    def test_default_ports_are_normalized_without_relaxing_origin_checks(self):
+        self.run_scenario('bridge-origin')
 
 
 if __name__ == '__main__':

@@ -14,6 +14,7 @@
 		A100000C /* app_settings.js in Resources */ = {isa = PBXBuildFile; fileRef = A100000B /* app_settings.js */; };
 		A100000E /* PreferredIP.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100000D /* PreferredIP.swift */; };
 		A1000014 /* PreferredIPRanking.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000013 /* PreferredIPRanking.swift */; };
+		A1000016 /* WebBridgeOrigin.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000015 /* WebBridgeOrigin.swift */; };
 		A1000012 /* prefip_patch.js in Resources */ = {isa = PBXBuildFile; fileRef = A1000011 /* prefip_patch.js */; };
 /* End PBXBuildFile section */
 
@@ -27,6 +28,7 @@
 		A100000B /* app_settings.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = ../../local_ext/app_settings.js; sourceTree = SOURCE_ROOT; };
 		A100000D /* PreferredIP.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreferredIP.swift; sourceTree = "<group>"; };
 		A1000013 /* PreferredIPRanking.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreferredIPRanking.swift; sourceTree = "<group>"; };
+		A1000015 /* WebBridgeOrigin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebBridgeOrigin.swift; sourceTree = "<group>"; };
 		A1000011 /* prefip_patch.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = ../../local_ext/prefip_patch.js; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
@@ -56,6 +58,7 @@
 				A1000003 /* WebView.swift */,
 				A100000D /* PreferredIP.swift */,
 				A1000013 /* PreferredIPRanking.swift */,
+				A1000015 /* WebBridgeOrigin.swift */,
 				A1000011 /* prefip_patch.js */,
 				A1000005 /* Assets.xcassets */,
 				A100000A /* AppConfig.plist */,
@@ -150,6 +153,7 @@
 				A1000004 /* WebView.swift in Sources */,
 				A100000E /* PreferredIP.swift in Sources */,
 				A1000014 /* PreferredIPRanking.swift in Sources */,
+				A1000016 /* WebBridgeOrigin.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
