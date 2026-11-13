@@ -1191,6 +1191,9 @@ function setPlayerSource(src, tried){
     hls.loadSource(url);
     hls.attachMedia(v);
     hls.on(Hls.Events.ERROR, function(ev, data){
+      /* ==== HGHUB_LOCAL_PATCH BEGIN ==== */
+      if (window.hgRecoverHls && window.hgRecoverHls(hls, data, tried)) return;
+      /* ==== HGHUB_LOCAL_PATCH END ==== */
       if (data && data.fatal && !tried){
         var next = (line === 'direct') ? 'proxy' : 'direct';
         toast((line === 'direct' ? '直连' : '代理') + '线路失败，尝试' + (next === 'direct' ? '直连' : '代理') + '...');
@@ -1592,6 +1595,12 @@ handleDeepLink();
 <!-- HGhub local patch end (tools/apply_local_patches.py) -->
 <!-- HGhub local patch begin (tools/apply_local_patches.py) -->
 <script src="/local_ext/prefip_patch.js"></script>
+<!-- HGhub local patch end (tools/apply_local_patches.py) -->
+<!-- HGhub local patch begin (tools/apply_local_patches.py) -->
+<script src="/local_ext/player_controls.js"></script>
+<!-- HGhub local patch end (tools/apply_local_patches.py) -->
+<!-- HGhub local patch begin (tools/apply_local_patches.py) -->
+<script src="/local_ext/video_enhance.js"></script>
 <!-- HGhub local patch end (tools/apply_local_patches.py) -->
 </body>
 </html>

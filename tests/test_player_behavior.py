@@ -48,6 +48,8 @@ class PlaybackBehaviorTests(BrowserFixture):
           };
         """)
         cls.evaluate((ROOT / 'local_ext/player_patch.js').read_text(encoding='utf-8'))
+        cls.evaluate((ROOT / 'local_ext/player_controls.js').read_text(encoding='utf-8'))
+        cls.evaluate((ROOT / 'local_ext/video_enhance.js').read_text(encoding='utf-8'))
 
     def setUp(self):
         self.evaluate("""

@@ -64,6 +64,8 @@ class BrowserFixture(unittest.TestCase):
         cls.evaluate((ROOT / "local_ext/web_patch.js").read_text(encoding="utf-8"))
         if getattr(cls, 'load_player_patch', True) and (ROOT / 'local_ext/player_patch.js').exists():
             cls.evaluate((ROOT / 'local_ext/player_patch.js').read_text(encoding='utf-8'))
+            cls.evaluate((ROOT / 'local_ext/player_controls.js').read_text(encoding='utf-8'))
+            cls.evaluate((ROOT / 'local_ext/video_enhance.js').read_text(encoding='utf-8'))
         cls.evaluate("document.body.classList.add('modal-open'); document.querySelector('#player').hidden=false; document.querySelector('#detailPane').hidden=true; document.querySelector('#playerPane').hidden=false;")
         cls.set_video_size(360, 640)
 
@@ -74,7 +76,7 @@ class BrowserFixture(unittest.TestCase):
           const v=document.querySelector('#video'); v.muted=true;
           if (v.srcObject) v.srcObject.getTracks().forEach(t=>t.stop());
           const ready=new Promise((resolve,reject)=>{v.onloadedmetadata=resolve; setTimeout(()=>reject(new Error('视频元数据超时')),3000);});
-          v.srcObject=c.captureStream(1); c.getContext('2d').fillRect(0,0,c.width,c.height);
+          v.srcObject=c.captureStream(1); c.getContext('2d').fillStyle='#6883ad';c.getContext('2d').fillRect(0,0,c.width,c.height);
           await ready; await v.play();
         })()""" % (width, height))
 
@@ -133,7 +135,7 @@ class PlayerLayoutTests(BrowserFixture):
                     self.assertLessEqual(b["right"], width, m)
                     self.assertLessEqual(b["bottom"], height, m)
 
-    def test_immersive_player_reuses_native_controls_and_fills_viewport(self):
+    def test_immersive_player_uses_unified_controls_and_fills_viewport(self):
         self.measure(430, 932)
         result = self.evaluate("""({nav:getComputedStyle(document.querySelector('.bottomnav')).display,
           width:document.querySelector('#video').getBoundingClientRect().width,
@@ -143,7 +145,8 @@ class PlayerLayoutTests(BrowserFixture):
         self.assertEqual(result['nav'], 'none', result)
         self.assertEqual(result['width'], 430, result)
         self.assertEqual(result['height'], 932, result)
-        self.assertTrue(result['controls'], result)
+        self.assertFalse(result['controls'], result)
+        self.assertTrue(self.evaluate("!!document.querySelector('#hgSystemFullscreen')"))
         self.assertTrue(result['rotate'], result)
 
     def test_search_header_has_no_gap_above_scrolled_content(self):
@@ -171,9 +174,9 @@ class PlayerLayoutTests(BrowserFixture):
         self.assertGreater(self.evaluate("document.querySelector('.bottomnav').getBoundingClientRect().height"), 0)
         self.evaluate("document.querySelector('#playerPane').hidden=false;document.querySelector('#detailPane').hidden=true")
 
-    def test_playing_controls_hide_and_reappear_without_replacing_native_fullscreen(self):
+    def test_playing_controls_hide_and_reappear_with_explicit_system_fullscreen(self):
         self.evaluate("document.querySelector('#video').dispatchEvent(new Event('play'))")
-        self.assertTrue(self.evaluate("document.querySelector('#video').controls"))
+        self.assertFalse(self.evaluate("document.querySelector('#video').controls"))
         hidden = self.evaluate("""(async()=>{
           await new Promise(r=>setTimeout(r,3200));
           return getComputedStyle(document.querySelector('#btnBackDetail')).visibility;

@@ -1,4 +1,4 @@
-/* 复用上游播放器、系统全屏控件、hg_progress 和观看历史，只增强布局与续播。 */
+/* 复用上游播放器、hg_progress 和观看历史，增强布局与续播；控件由 player_controls.js 管理。 */
 (function () {
   'use strict';
   if (window.__hgPlayerPatch) return;
@@ -46,6 +46,7 @@
     clearTimeout(hideTimer);
     if (immersive && !video.paused) hideTimer = setTimeout(function () {
       var focused = document.activeElement;
+      if (pane.querySelector('.hg-choice') || pane.querySelector('#hgHoldHint:not([hidden])')) return;
       if (pane.contains(focused) && focused !== video &&
           (focused.tagName === 'SELECT' || focused.matches(':focus-visible'))) return;
       document.body.classList.add('hg-ui-hidden');
