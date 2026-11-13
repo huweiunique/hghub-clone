@@ -8,7 +8,10 @@ name: _build
 #   app_url  构建时内置的后端地址（留空则首次打开手填）
 #
 # 访问密钥【不参与构建】：用户在 App 首次打开时输入并保存在本机。
-# 结构：notes（算说明）→ apk / ipa（并行构建）→ publish（合并产物到同一个 Release）
+# 结构：notes（算说明）→ apk / ipa / docker（并行）→ publish（合并产物到同一个 Release）
+#
+# Docker 镜像（可选）：配置了 DOCKERHUB_USERNAME + DOCKERHUB_TOKEN 两个 secret 时，
+# 自动构建多架构镜像并推送到 Docker Hub；没配置则跳过，不会让流水线失败。
 
 on:
   workflow_call:
@@ -189,3 +192,91 @@ jobs:
           files: |
             dist/HGhub-*.apk
             dist/HGhub-*.ipa
+
+  # ----------------------------------------------------------- Docker 镜像
+  # 需要仓库 Secrets：DOCKERHUB_USERNAME、DOCKERHUB_TOKEN（Access Token，不是密码）
+  # 两个都配了才会跑；否则整个 job 跳过。token 只在 login-action 里用，不会出现在日志。
+  docker:
+    needs: notes
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: 没有配置 Docker Hub 凭据则跳过
+        id: gate
+        env:
+          U: ${{ secrets.DOCKERHUB_USERNAME }}
+          T: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: |
+          if [ -n "$U" ] && [ -n "$T" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+            echo "user=$U" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::未配置 DOCKERHUB_USERNAME / DOCKERHUB_TOKEN，跳过镜像推送"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.gate.outputs.enabled == 'true'
+
+      - name: 设置 Buildx
+        if: steps.gate.outputs.enabled == 'true'
+        uses: docker/setup-buildx-action@v3
+
+      - name: 登录 Docker Hub
+        if: steps.gate.outputs.enabled == 'true'
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: 计算镜像标签
+        id: meta
+        if: steps.gate.outputs.enabled == 'true'
+        run: |
+          REPO="${{ steps.gate.outputs.user }}/hghub"
+          SHA="${GITHUB_SHA::7}"
+          BASE=$(grep -o 'versionName = "[^"]*"' android/app/build.gradle | head -1 | sed 's/.*"\(.*\)"/\1/')
+          OUTFILE="$RUNNER_TEMP/tags.txt"
+          if [ "${{ inputs.channel }}" = "stable" ]; then
+            # 正式版：v1.2.0.9 + 基线版本号 + latest
+            printf '%s\n' "${REPO}:${{ github.ref_name }}" "${REPO}:${BASE}" "${REPO}:latest" > "$OUTFILE"
+          else
+            # Nightly：nightly 与 nightly-<sha>，绝不覆盖 latest
+            printf '%s\n' "${REPO}:nightly" "${REPO}:nightly-${SHA}" > "$OUTFILE"
+          fi
+          {
+            echo "repo=$REPO"
+            echo "tags<<EOF"
+            cat "$OUTFILE"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+          echo "将推送："
+          cat "$OUTFILE"
+
+      - name: 构建并推送（linux/amd64 + linux/arm64）
+        if: steps.gate.outputs.enabled == 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          build-args: |
+            APT_MIRROR=deb.debian.org
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.title=HGhub
+            org.opencontainers.image.version=${{ needs.notes.outputs.version }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: 推送结果
+        if: steps.gate.outputs.enabled == 'true'
+        run: |
+          echo "### Docker 镜像已推送" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "${{ steps.meta.outputs.tags }}" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          docker buildx imagetools inspect ${{ steps.meta.outputs.repo }}:$( [ "${{ inputs.channel }}" = "stable" ] && echo latest || echo nightly )

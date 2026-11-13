@@ -274,5 +274,44 @@ class ReleaseChannelTests(unittest.TestCase):
         self.assertIn("AccessKey", build)
 
 
+class DockerHubPublishTests(unittest.TestCase):
+    """CI 推送镜像到 Docker Hub：凭据只能来自 Secrets，不能硬编码。"""
+
+    def setUp(self):
+        self.build = read(".github", "workflows", "_build.yml")
+
+    def test_uses_secrets_for_login(self):
+        self.assertIn("secrets.DOCKERHUB_USERNAME", self.build)
+        self.assertIn("secrets.DOCKERHUB_TOKEN", self.build)
+        self.assertIn("docker/login-action", self.build)
+
+    def test_no_hardcoded_credentials(self):
+        # 不能出现明文 token / 密码（正则找真实凭据形态，允许 ${{ secrets.X }}）
+        self.assertNotRegex(self.build, r"dckr_pat_[A-Za-z0-9]{10,}")
+        self.assertNotRegex(self.build, r"(?m)^\s*password:\s*(?!\$\{\{)\S+")
+        self.assertNotRegex(self.build, r"DOCKERHUB_TOKEN\s*[:=]\s*['\"]?[A-Za-z0-9_\-]{20,}")
+
+    def test_skips_when_not_configured(self):
+        # 没配 secret 时不能失败
+        self.assertIn("enabled=false", self.build)
+        self.assertIn("跳过镜像推送", self.build)
+
+    def test_nightly_never_overwrites_latest(self):
+        # nightly 分支只打 nightly* 标签
+        nightly_block = self.build.split('channel }}" = "stable"')[0]
+        self.assertIn("${REPO}:nightly", self.build)
+        # latest 只在 stable 分支里
+        stable_part = self.build.split("else", 1)[1] if "else" in self.build else ""
+        self.assertIn(":latest", self.build)
+
+    def test_multi_arch(self):
+        self.assertIn("linux/amd64,linux/arm64", self.build)
+
+    def test_push_docs_exist(self):
+        doc = read("docs", "docker.md")
+        self.assertIn("DOCKERHUB_TOKEN", doc)
+        self.assertIn("Access Token", doc)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

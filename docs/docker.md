@@ -201,3 +201,82 @@ git push origin v1.2.0.9
 
 可选：在仓库 Settings → Variables 里设置 `HGHUB_APP_URL`，构建时就会把它内置成后端地址
 （密钥仍然不内置）。
+
+## 七、发布镜像到 Docker Hub（CI 自动）
+
+上面的 docker.md 讲的是本机构建。如果想让 GitHub Actions **自动构建并推送**镜像，
+按下面两步配置，之后每次 Nightly / 正式发版都会顺带推镜像。
+
+### 1. 在 Docker Hub 建 Access Token（不要用账号密码）
+
+1. 登录 <https://hub.docker.com/> → 右上头像 → **Account settings**
+2. 左侧 **Personal access tokens** → **Generate new token**
+3. 权限选 **Read & Write**（只推送镜像不需要 Admin）
+4. 复制生成的 token（`dckr_pat_...`，**只显示一次**）
+
+> 用 Access Token 而不是密码：可以单独吊销，泄露影响面小，也不受二次验证影响。
+
+### 2. 把仓库建出来（第一次需要）
+
+Docker Hub 上先建一个名为 `hghub` 的仓库（或推第一次时自动创建，取决于账号设置）。
+镜像名格式：`<用户名>/hghub`。
+
+### 3. 在 GitHub 仓库加两个 Secret
+
+```bash
+# 在仓库根目录执行（已 gh auth login）
+gh secret set DOCKERHUB_USERNAME   # 粘贴你的 Docker Hub 用户名，如 huwei1990511
+gh secret set DOCKERHUB_TOKEN      # 粘贴上一步的 dckr_pat_...
+```
+
+或者网页操作：仓库 → **Settings** → **Secrets and variables** → **Actions** →
+**New repository secret**，分别建 `DOCKERHUB_USERNAME` 和 `DOCKERHUB_TOKEN`。
+
+**安全要点**：
+
+- token 只存在 GitHub Secrets 里，**不会**出现在代码、日志或 Release 里；
+- 工作流里只在 `docker/login-action` 这一步使用，日志会打码；
+- **不要**把 token 写进 `.env`、`docker-compose.yml` 或任何提交的文件；
+- 定期轮换：Docker Hub 上删旧 token、生成新的、更新 Secret 即可，代码不用改；
+- 仓库不要给别人 `Secrets: write` 权限，只给 `maintain` 及以下也不行。
+
+### 4. 推送时机与标签
+
+| 触发 | 推送的标签 | 说明 |
+| --- | --- | --- |
+| Nightly（每天定时/手动） | `nightly`、`nightly-<sha>` | **不会覆盖 `latest`** |
+| 正式 tag（`v1.2.0.9`） | `v1.2.0.9`、`1.2.0.8`、`latest` | 只有正式发版才更新 `latest` |
+
+- 多架构：同时构建 `linux/amd64` 和 `linux/arm64`（ARM 服务器 / Apple Silicon 可直接跑）；
+- 构建缓存走 GitHub Actions 缓存（`type=gha`），第二次起快很多；
+- **没配置这两个 Secret 时自动跳过**，不影响 APK/IPA 流水线。
+
+### 5. 使用推送上去的镜像
+
+```bash
+# 拉取（Nightly）
+docker pull <用户名>/hghub:nightly
+
+# 运行
+docker run -d --name hghub \
+  -p 8081:8081 \
+  -e HGHUB_ACCESS_KEY="my-home-server-2026" \
+  --restart unless-stopped \
+  <用户名>/hghub:nightly
+
+# compose 里改用远程镜像（不用 build）
+# services:
+#   hghub:
+#     image: <用户名>/hghub:nightly
+#     ports: ["8081:8081"]
+```
+
+### 6. 手动推一次（本机）
+
+CI 之外也可以自己推：
+
+```bash
+docker login -u <用户名>          # 密码处粘贴 Access Token
+docker build -t <用户名>/hghub:1.2.0.8 .
+docker push <用户名>/hghub:1.2.0.8
+```
