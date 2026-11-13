@@ -179,8 +179,13 @@ jobs:
 
       - name: 验证优选 IP 本机连接通道
         run: |
-          python3 tests/test_prefip_transport.py -v
-          python3 tests/test_prefip_ranking.py -v
+          transport_status=0
+          ranking_status=0
+          python3 tests/test_prefip_transport.py -v || transport_status=$?
+          python3 tests/test_prefip_ranking.py -v || ranking_status=$?
+          if [ "$transport_status" -ne 0 ] || [ "$ranking_status" -ne 0 ]; then
+            exit 1
+          fi
 
       - name: 构建未签名 IPA
         env:

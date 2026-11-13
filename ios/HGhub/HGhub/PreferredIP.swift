@@ -165,18 +165,21 @@ final class CFConnectProxy {
             source.receive(minimumIncompleteLength: 1, maximumLength: 65536) { [weak self] data, _, done, error in
                 guard let self = self, !self.closed else { return }
                 guard error == nil else { self.close(); return }
-                // defaultMessage 的完成只结束当前逻辑消息；只有 finalMessage 才发送 TCP FIN。
-                // 每个数据块都完成其上下文，避免最终 FIN 被前一个未完成的上下文阻塞。
-                target.send(content: data, contentContext: done ? .finalMessage : .defaultMessage,
-                            isComplete: true, completion: .contentProcessed { [weak self] error in
+                // 先完成最后一块数据的发送，再单独发 FIN，保持数据和写关闭的顺序。
+                target.send(content: data, isComplete: true, completion: .contentProcessed { [weak self] error in
                     guard let self = self, !self.closed else { return }
                     if error != nil { self.close() }
                     else if done {
-                        self.completedDirections += 1
-                        if self.completedDirections == 2 { self.close() }
-                        else {
-                            self.queue.asyncAfter(deadline: .now() + 15) { [weak self] in self?.close() }
-                        }
+                        target.send(content: nil, contentContext: .finalMessage, isComplete: true,
+                                    completion: .contentProcessed { [weak self] error in
+                            guard let self = self, !self.closed else { return }
+                            if error != nil { self.close(); return }
+                            self.completedDirections += 1
+                            if self.completedDirections == 2 { self.close() }
+                            else {
+                                self.queue.asyncAfter(deadline: .now() + 15) { [weak self] in self?.close() }
+                            }
+                        })
                     } else { self.pipe(source, to: target) }
                 })
             }

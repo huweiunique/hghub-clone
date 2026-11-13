@@ -95,6 +95,8 @@ dispatchMain()
         received = b''
         while chunk := connection.recv(65536):
             received += chunk
+        self.assertEqual(len(received), len(payload) + len(b'fixture-tail'),
+                         f'转发数据不完整：收到 {len(received)} 字节，期望 {len(payload) + len(b"fixture-tail")} 字节；末尾={received[-24:]!r}')
         self.assertEqual(received, payload + b'fixture-tail')
 
     def test_other_domain_or_port_is_rejected(self):
