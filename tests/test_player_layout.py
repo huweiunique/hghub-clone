@@ -40,7 +40,8 @@ class PlayerLayoutTests(unittest.TestCase):
         cls.addClassCleanup(cls.browser_log.close)
         cls.proc = subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=cls.browser_log)
         cls.addClassCleanup(cls.stop_browser)
-        for _ in range(100):
+        last_error = None
+        for _ in range(300):
             if cls.proc.poll() is not None:
                 raise RuntimeError('浏览器启动失败：' + (Path(cls.profile.name) / 'chrome.log').read_text(encoding='utf-8', errors='replace')[-4000:])
             try:
@@ -48,10 +49,12 @@ class PlayerLayoutTests(unittest.TestCase):
                     pages = json.load(r)
                 cls.ws = WS(next(p["webSocketDebuggerUrl"] for p in pages if p["type"] == "page"))
                 break
-            except (OSError, StopIteration):
+            except (OSError, StopIteration) as error:
+                last_error = error
                 time.sleep(0.1)
         else:
-            raise RuntimeError("浏览器启动超时")
+            log = (Path(cls.profile.name) / 'chrome.log').read_text(encoding='utf-8', errors='replace')[-4000:]
+            raise RuntimeError(f"浏览器启动超时：{chrome}，{last_error!r}\n{log}")
         cls.ws.call("Page.enable")
         # 复用真实 HTML/CSS 和本地扩展，仅关闭联网业务脚本。
         html = re.sub(r"<script\b[^>]*>.*?</script>", "", (ROOT / "web/index.html").read_text(encoding="utf-8"), flags=re.S)
