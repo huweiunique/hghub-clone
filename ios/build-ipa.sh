@@ -134,4 +134,4 @@ rm -f "$OUT/$IPA_NAME"
 
 echo "[ios] 产物：$OUT/$IPA_NAME"
 ls -lh "$OUT/$IPA_NAME"
-unzip -l "$OUT/HGhub-${VERSION}-unsigned.ipa" | head -15
+unzip -l "$OUT/$IPA_NAME" | head -15
