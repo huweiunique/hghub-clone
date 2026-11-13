@@ -4,16 +4,18 @@
  *   <script src="/local_ext/web_patch.js"></script>
  * 引入，不修改页面正文，上游更新时不会冲突。
  *
- * 做两件事：
+ * 功能：
  *   1. 后端启用了 HGHUB_ACCESS_KEY 时，探测到 401 就弹输入框；
  *      输入正确后后端下发 Cookie，之后所有 /api/*、/proxy/* 自动带上。
- *   2. 用 ?key=xxx 打开时不需要弹框（后端已 302 并写好 Cookie）。
+ *   2. 用 ?key=xxx 打开时主动换取 Cookie，成功后不弹框。
+ *   3. 修正手机、平板和横屏下的布局与安全区适配。
  */
 (function () {
   'use strict';
 
   function boot() {
     installStyles();
+    trackNavigationHeight();
     probe();
   }
 
@@ -37,9 +39,45 @@
       '.meta .ic-svg,.detail-stats .ic-svg,.card .t p .ic-svg,',
       '.rankrow p .ic-svg,.post .meta .ic-svg{display:inline-block;vertical-align:-2px}',
       /* App 壳右上角的齿轮浮层会压住“搜索”按钮，给顶栏右侧留出空间 */
-      'body.hg-app header{padding-right:78px}'
+      'body.hg-app header{padding-right:78px}',
+      '.search{min-width:0}',
+      '.search button{flex-shrink:0}',
+      '.btn svg{display:inline-block;width:14px;height:14px;vertical-align:-2px}',
+      '.rankrow>div{flex:1;min-width:0;overflow-wrap:anywhere}',
+      '.rankrow img,.rankrow .no{flex-shrink:0}',
+      '.post,.card .t,.modal .desc,.modal h2{overflow-wrap:anywhere}',
+      '.sheet{padding-bottom:calc(var(--bottomnav-h) + 20px)}',
+      '#toast{bottom:calc(var(--bottomnav-h) + 20px);max-width:calc(100% - 24px);overflow-wrap:anywhere}',
+      /* 看全集：顶部返回、底部操作栏按实际高度布局，视频占满剩余空间。
+       * 只作用于播放状态，详情页仍沿用上游的滚动布局。 */
+      '#player:has(#playerPane:not([hidden])){',
+      'padding:max(12px,env(safe-area-inset-top)) max(12px,env(safe-area-inset-right)) ',
+      'calc(var(--hg-nav-height,var(--bottomnav-h)) + 12px) max(12px,env(safe-area-inset-left));',
+      'height:100vh;height:100dvh;overflow:hidden}',
+      '#player:has(#playerPane:not([hidden])) .box{position:relative;max-width:none;height:100%}',
+      '#player:has(#playerPane:not([hidden])) .close{position:absolute;top:0;right:0}',
+      '#playerPane{display:grid;grid-template-rows:auto minmax(0,1fr) auto;height:100%;min-height:0}',
+      '#playerPane .backlink{justify-self:start;margin-right:44px}',
+      '#playerPane #video{display:block;width:100%;height:100%;min-height:0;max-height:none;object-fit:contain}',
+      '#playerPane .ctl{margin:10px 0 0}',
+      '#playerPane .ctl svg{display:inline-block;width:14px;height:14px;vertical-align:-2px}'
     ].join('');
     document.head.appendChild(st);
+  }
+
+  /** 底栏含安全区和自动换行，不能只用固定的 --bottomnav-h 估计。 */
+  function trackNavigationHeight() {
+    var nav = document.querySelector('.bottomnav');
+    if (!nav) return;
+    function update() {
+      var height = nav.getBoundingClientRect().height + 'px';
+      document.documentElement.style.setProperty('--hg-nav-height', height);
+      // 首页、普通列表、详情和评论/分享面板也共用底栏实际高度。
+      document.documentElement.style.setProperty('--bottomnav-h', height);
+    }
+    update();
+    if (typeof ResizeObserver !== 'undefined') new ResizeObserver(update).observe(nav, { box: 'border-box' });
+    else window.addEventListener('resize', update);
   }
 
   /** 从页面 URL 里取 ?key= 参数（App 壳/分享链接可能带） */
@@ -111,11 +149,11 @@
     var wrap = document.createElement('div');
     wrap.id = '__hg_key_box';
     wrap.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.85);' +
-      'display:flex;align-items:center;justify-content:center;padding:24px;' +
+      'display:flex;align-items:center;justify-content:center;padding:24px;overflow-y:auto;' +
       '-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px)';
     wrap.innerHTML =
       '<div style="background:var(--card,#1a1a1f);color:var(--text,#f5f5f5);border-radius:18px;' +
-      'padding:22px;max-width:360px;width:100%;box-shadow:0 12px 40px rgba(0,0,0,.5)">' +
+      'padding:22px;margin:auto;flex-shrink:0;max-width:360px;width:100%;box-shadow:0 12px 40px rgba(0,0,0,.5)">' +
       '<h3 style="margin:0 0 8px;font-size:17px">需要访问密钥</h3>' +
       '<p style="margin:0 0 12px;font-size:13px;color:var(--muted,#9a9aa3);line-height:1.5">' +
       '这台服务器开启了访问密钥，输入一次即可（保存在本机，30 天有效）</p>' +
