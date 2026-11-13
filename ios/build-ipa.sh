@@ -42,52 +42,45 @@ cd "$PROJ_DIR"
 rm -rf "$PROJ_DIR/build" "$PROJ_DIR/build.log"
 mkdir -p "$PROJ_DIR/build"
 
-echo "[ios] xcodebuild archive（ad-hoc 签名，不依赖开发者证书）"
-# 注意：CODE_SIGNING_ALLOWED=NO 时 Xcode 只 build 不出 archive（踩过），
-# 所以这里用 ad-hoc 签名（CODE_SIGN_IDENTITY="-"）。
-# 产物仍是"未签名"的开发者包：APP_NAME.app + Payload/，Sideloadly/AltStore 会用自己的证书重签。
+echo "[ios] xcodebuild build（不签名，直接产出 .app）"
+# 关键点（都踩过）：
+#   1. CODE_SIGNING_ALLOWED=NO 时 xcodebuild archive 只 build、不生成 .xcarchive；
+#   2. iOS 26.5 SDK 起不允许 ad-hoc（CODE_SIGN_IDENTITY="-"）签名：
+#      "Ad Hoc code signing is not allowed with SDK 'iOS 26.5'"。
+# 所以这里直接 build 到 DerivedData，再自己组装 Payload/，不经过 archive。
 xcodebuild \
   -project "$PROJ_DIR/HGhub.xcodeproj" \
   -scheme "$SCHEME" \
   -configuration Release \
   -sdk iphoneos \
   -destination "generic/platform=iOS" \
-  -archivePath "$PROJ_DIR/build/HGhub.xcarchive" \
   -derivedDataPath "$PROJ_DIR/build/DerivedData" \
-  CODE_SIGN_IDENTITY="-" \
+  CODE_SIGNING_ALLOWED=NO \
   CODE_SIGNING_REQUIRED=NO \
-  CODE_SIGNING_ALLOWED=YES \
-  CODE_SIGN_ENTITLEMENTS="" \
+  CODE_SIGN_IDENTITY="" \
   DEVELOPMENT_TEAM="" \
-  PROVISIONING_PROFILE_SPECIFIER="" \
   ONLY_ACTIVE_ARCH=NO \
   > "$PROJ_DIR/build.log" 2>&1 || {
     echo "[ios] xcodebuild 失败，最后 60 行：" >&2
     tail -60 "$PROJ_DIR/build.log" >&2
     exit 1
   }
-grep -E "ARCHIVE SUCCEEDED|BUILD SUCCEEDED|BUILD FAILED" "$PROJ_DIR/build.log" || true
-tail -15 "$PROJ_DIR/build.log"
+grep -E "BUILD SUCCEEDED|BUILD FAILED" "$PROJ_DIR/build.log" || true
+tail -10 "$PROJ_DIR/build.log"
 
-ARCHIVE="$PROJ_DIR/build/HGhub.xcarchive"
-[ -d "$ARCHIVE" ] || {
-  echo "[ios] archive 没有生成：$ARCHIVE" >&2
-  ls -la "$PROJ_DIR/build" >&2 || true
-  exit 1
-}
-
-APP_PATH="$ARCHIVE/Products/Applications/HGhub.app"
-# Xcode 26 起 archive 里的产品目录可能有变化，找不到就在整个 .xcarchive 里搜索
+# 从 DerivedData 里找 Release-iphoneos/HGhub.app
+APP_PATH="$PROJ_DIR/build/DerivedData/Build/Products/Release-iphoneos/HGhub.app"
 if [ ! -d "$APP_PATH" ]; then
-  echo "[ios] 默认路径没有 app，搜索 archive 内容："
-  find "$ARCHIVE" -maxdepth 4 -name "*.app" -type d || true
-  APP_PATH="$(find "$ARCHIVE" -name "HGhub.app" -type d | head -1)"
+  echo "[ios] 默认路径没有 app，搜索 DerivedData："
+  find "$PROJ_DIR/build/DerivedData" -name "HGhub.app" -type d -maxdepth 6 || true
+  APP_PATH="$(find "$PROJ_DIR/build/DerivedData" -name "HGhub.app" -type d | grep -v '\.app\.' | head -1)"
 fi
 [ -n "$APP_PATH" ] && [ -d "$APP_PATH" ] || {
-  echo "[ios] 归档里没找到 HGhub.app" >&2
+  echo "[ios] 构建产物里没找到 HGhub.app" >&2
   exit 1
 }
 echo "[ios] app 路径：$APP_PATH"
+file "$APP_PATH/HGhub" || true
 
 # AppConfig.plist 必须在 Bundle 里，AppSettings 才能读到
 cp "$PROJ_DIR/HGhub/AppConfig.plist" "$APP_PATH/AppConfig.plist"
