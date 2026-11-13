@@ -225,7 +225,7 @@ Docker Hub 上先建一个名为 `hghub` 的仓库（或推第一次时自动创
 
 ```bash
 # 在仓库根目录执行（已 gh auth login）
-gh secret set DOCKERHUB_USERNAME   # 粘贴你的 Docker Hub 用户名，如 huwei1990511
+gh secret set DOCKERHUB_USERNAME   # 粘贴你的 Docker Hub 用户名
 gh secret set DOCKERHUB_TOKEN      # 粘贴上一步的 dckr_pat_...
 ```
 
@@ -280,3 +280,156 @@ docker login -u <用户名>          # 密码处粘贴 Access Token
 docker build -t <用户名>/hghub:1.2.0.8 .
 docker push <用户名>/hghub:1.2.0.8
 ```
+
+## 八、在 1Panel 里用「编排」部署
+
+1Panel 自带的 **容器 → 编排（Compose）** 功能，本质就是帮你在服务器上管理一个
+`docker-compose.yml`：你粘贴 YAML，它负责创建目录、执行 `docker compose up -d`、
+展示状态和日志，还支持更新和查看文件。
+
+### 8.1 面板里怎么建
+
+1. 左侧菜单 → **容器** → **编排** → 右上角 **创建编排**
+2. **名称**：填 `hghub`（会让你容器/项目以这个名字出现）
+3. **分组**：随便选或新建，比如 `自用`
+4. **来源**：选 **编辑** / **手动输入**（不是「从仓库拉取」）
+5. 把下面 8.2 的 YAML 整段粘进去
+6. 点 **确认** → 1Panel 会自动创建目录（通常是
+   `/opt/1panel/docker/compose/hghub/`）并执行 `docker compose up -d`
+
+> 不同版本 1Panel 的按钮文案略有差异（有的叫「编排模板」「Compose 编排」），
+> 但都在 **容器** 菜单下，认准「粘贴 YAML 创建」这个入口即可。
+> 如果最终看到「运行中」，说明是用 `docker compose` 起的。
+
+### 8.2 直接粘贴的 YAML（用 Docker Hub 上的镜像）
+
+```yaml
+services:
+  hghub:
+    image: <你的DockerHub用户名>/hghub:nightly
+    container_name: hghub
+    restart: unless-stopped
+    ports:
+      - "8081:8081"
+      - "8080:8080"
+    environment:
+      TZ: Asia/Shanghai
+      # 访问密钥：任意字符串，留空则不鉴权
+      HGHUB_ACCESS_KEY: "my-home-server-2026"
+      HGHUB_ALLOW_IPS: ""
+      HGHUB_TRUST_PROXY: ""
+      HGHUB_COOKIE_SECURE: ""
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8081/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+```
+
+> 注意：**1Panel 的编排 YAML 里不要写 `build:` 和 `version:`**。
+> 1Panel 是在服务器上运行，没有你的源码，`build` 会因为找不到 `Dockerfile` 失败；
+> `version:` 在新版 Docker Compose 里已废弃，写了会有警告。
+> 镜像必须用 `image:` 指向 Docker Hub（或你自己的私有仓库）。
+
+### 8.3 如果一定要「自己构建」（可选）
+
+先把镜像构建好并推到 Docker Hub（见第七章），再用 8.2 的 `image:` 引用。
+**不要**在 1Panel 里直接 `build` 本地源码 —— 它没有源码。
+
+### 8.4 端口冲突怎么办
+
+1Panel 所在服务器上 8080 很常被别的容器占用（1Panel 自己、OpenResty、其他面板应用）。
+改映射的**左边**（宿主机端口）即可，右边不变：
+
+```yaml
+    ports:
+      - "18081:8081"     # 浏览器访问 18081
+      - "18080:8080"     # 播放代理，可不对外暴露
+```
+
+只想给网页用、不暴露代理端口时，可以只留：
+
+```yaml
+    ports:
+      - "18081:8081"
+```
+
+（8081 内部会自动反代到容器里的 8080，不需要对外映射 8080。）
+
+### 8.5 环境变量怎么改
+
+**不要在面板里改 YAML 后忘了重启**。两种方式：
+
+- **直接改 YAML**（推荐，改动可见）：
+  编排列表 → 找到 `hghub` → **编辑** → 改 `environment:` → 保存 → **重建/重启**
+- **用 1Panel 的 `.env`**（如果该版本支持）：
+  在编排目录 `/opt/1panel/docker/compose/hghub/.env` 写：
+
+  ```dotenv
+  HGHUB_ACCESS_KEY=my-home-server-2026
+  WEB_PORT=18081
+  ```
+
+  然后 YAML 里用 `${HGHUB_ACCESS_KEY}` 引用：
+
+  ```yaml
+  environment:
+    HGHUB_ACCESS_KEY: ${HGHUB_ACCESS_KEY}
+  ports:
+    - "${WEB_PORT:-8081}:8081"
+  ```
+
+  `.env` 不会进 git，适合放密钥。
+
+### 8.6 部署后怎么验证
+
+- 1Panel 编排列表里状态显示 **运行中**；
+- 点「日志」能看到：
+
+  ```
+  [hghub] 访问密钥已开启
+  [hghub] 启动播放代理 :8080
+  [hghub] 启动网页服务 :8081（反代 -> http://127.0.0.1:8080）
+  ```
+
+- 浏览器打开 `http://<服务器IP>:18081/?key=<你的密钥>`，能看到首页 feed 并播放。
+
+服务器上也可以直接验证：
+
+```bash
+docker ps | grep hghub
+curl -s http://127.0.0.1:18081/health        # {"status": "ok"}
+curl -s -X POST -H 'Content-Type: application/json' -d '{"id":12,"ep":1}' \
+  http://127.0.0.1:18080/api/play | head -c 120
+```
+
+### 8.7 更新到最新 Nightly
+
+编排列表里点 **更新**（有些版本叫「重新拉取并重建」）：1Panel 会 `docker pull` 最新镜像并重建容器。
+命令行等价操作：
+
+```bash
+docker compose -f /opt/1panel/docker/compose/hghub/docker-compose.yml pull
+docker compose -f /opt/1panel/docker/compose/hghub/docker-compose.yml up -d
+```
+
+> `nightly` 标签每天覆盖，所以「更新」就能拿到当天构建。想固定版本就改成
+> `<你的DockerHub用户名>/hghub:nightly-<sha>`，或者等正式版的 `latest`。
+
+### 8.8 常见问题
+
+| 现象 | 原因 | 处理 |
+| --- | --- | --- |
+| 编排创建失败，提示找不到 Dockerfile | YAML 里写了 `build:` | 删掉 `build`，改用 `image:` |
+| 提示 `port is already allocated` | 8080/8081 被占用 | 改映射左边端口（见 8.4） |
+| 状态一直「重启中」 | 端口冲突或网络拉不到上游 | 看日志；确认服务器能访问 huangguoai.com |
+| 页面能开但封面全破图 | 镜像缺 openssl（自己改过镜像） | 改用本仓库 `Dockerfile` 构建的镜像 |
+| 一直弹「需要访问密钥」 | 输入的 key 与服务端不一致 | 核对 `docker exec hghub env \| grep HGHUB` |
+| 改了 YAML 没生效 | 没重建容器 | 点「重启」或「重新部署」，不要只改文件 |
+

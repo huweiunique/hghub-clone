@@ -320,6 +320,24 @@ class DockerHubPublishTests(unittest.TestCase):
         self.assertIn("DOCKERHUB_TOKEN", doc)
         self.assertIn("Access Token", doc)
 
+    def test_no_private_dockerhub_account_in_docs(self):
+        """文档里不能出现真实的私有 Docker Hub 账号名，只能用占位符。"""
+        for rel in ("docs/docker.md", "docker-compose.yml", "README.md", ".env.example"):
+            text = read(*rel.split("/"))
+            self.assertNotRegex(text, r"[A-Za-z0-9_-]+/hghub:",
+                                f"{rel} 里出现了具体的 Docker Hub 仓库路径")
+            self.assertIn("你的DockerHub用户名", text) if rel == "docs/docker.md" else None
+
+    def test_1panel_section(self):
+        doc = read("docs", "docker.md")
+        self.assertIn("1Panel", doc)
+        self.assertIn("编排", doc)
+        # 1Panel 在服务器上跑，没有源码：YAML 里不能出现 build:
+        block = doc.split("### 8.2", 1)[1].split("```yaml", 1)[1].split("```", 1)[0]
+        self.assertNotIn("build:", block)
+        self.assertIn("image:", block)
+        self.assertIn("HGHUB_ACCESS_KEY", block)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
