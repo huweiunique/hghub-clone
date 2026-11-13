@@ -80,3 +80,29 @@ docker push <user>/hghub:1.2.0.8
 ```
 
 也可以在 GitHub Actions 里用 `docker/login-action` + secrets 自动发布（未配置）。
+
+## 访问密钥怎么传（环境变量）
+
+密钥**只从环境变量进入容器**，不写进镜像、不进 git：
+
+```bash
+# 方式一：临时
+HGHUB_ACCESS_KEY=$(openssl rand -hex 32) docker compose up -d
+
+# 方式二：写进 .env（推荐，.env 已在 .gitignore 里）
+cp .env.example .env
+# 编辑 .env 填写 HGHUB_ACCESS_KEY=...
+docker compose up -d
+```
+
+可用的环境变量：
+
+| 变量 | 作用 |
+| --- | --- |
+| `HGHUB_ACCESS_KEY` | 访问密钥；留空 = 关闭鉴权 |
+| `HGHUB_ALLOW_IPS` | 来源 IP 白名单（逗号分隔，与密钥同时生效） |
+| `HGHUB_TRUST_PROXY` | `1` = 信任 `X-Forwarded-For`（放在反代后面时） |
+| `HGHUB_COOKIE_SECURE` | `1` = Cookie 带 Secure（HTTPS） |
+| `WEB_PORT` / `PROXY_PORT` | 宿主机映射端口 |
+
+启动后 `docker logs hghub` 会打印是否开启了鉴权，以及访问链接格式（不会打印密钥本身）。
