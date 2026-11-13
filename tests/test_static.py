@@ -285,6 +285,14 @@ class DockerHubPublishTests(unittest.TestCase):
         self.assertIn("secrets.DOCKERHUB_TOKEN", self.build)
         self.assertIn("docker/login-action", self.build)
 
+    def test_caller_passes_secrets_explicitly(self):
+        """workflow_call 不会自动继承 secrets：调用方必须显式传，delegate 必须声明。"""
+        self.assertIn("secrets:\n      DOCKERHUB_USERNAME", self.build)
+        for wf in ("nightly.yml", "release.yml"):
+            text = read(".github", "workflows", wf)
+            self.assertIn("DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}", text, wf)
+            self.assertIn("DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}", text, wf)
+
     def test_no_hardcoded_credentials(self):
         # 不能出现明文 token / 密码（正则找真实凭据形态，允许 ${{ secrets.X }}）
         self.assertNotRegex(self.build, r"dckr_pat_[A-Za-z0-9]{10,}")

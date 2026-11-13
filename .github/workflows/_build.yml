@@ -23,6 +23,14 @@ on:
         type: string
         required: false
         default: ""
+    # 关键：workflow_call 默认【不继承】调用方的 secrets，
+    # 不在这里声明的话，job 里取到的 ${{ secrets.DOCKERHUB_* }} 是空的，
+    # job 会被"未配置凭据"逻辑跳过（本仓库踩过）。required: false 不会因缺失而失败。
+    secrets:
+      DOCKERHUB_USERNAME:
+        required: false
+      DOCKERHUB_TOKEN:
+        required: false
 
 permissions:
   contents: write

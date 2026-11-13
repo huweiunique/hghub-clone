@@ -21,6 +21,10 @@ concurrency:
 jobs:
   build:
     uses: ./.github/workflows/_build.yml
+    # 显式传递 Docker Hub 凭据（workflow_call 不会自动继承 secrets）
+    secrets:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
     with:
       channel: nightly
       app_url: ${{ vars.HGHUB_APP_URL || '' }}
