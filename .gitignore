@@ -3,6 +3,10 @@ ios/HGhub/HGhub/AppConfig.plist
 .env
 .env.local
 
+# Python 缓存
+__pycache__/
+*.pyc
+
 # 构建产物
 dist/
 ios/HGhub/build/
