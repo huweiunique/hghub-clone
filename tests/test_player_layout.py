@@ -1,5 +1,6 @@
 """看全集的真实浏览器布局回归；无 Chrome/Edge 时明确跳过，不访问上游。"""
 import json
+import os
 from pathlib import Path
 import re
 import subprocess
@@ -25,14 +26,23 @@ class PlayerLayoutTests(unittest.TestCase):
         cls.profile = tempfile.TemporaryDirectory(dir=ROOT / ".test-tmp")
         cls.addClassCleanup(cls.profile.cleanup)
         port = free_port()
-        cls.proc = subprocess.Popen([
+        args = [
             chrome, "--headless=new", "--disable-gpu", "--no-first-run",
             "--no-default-browser-check", "--autoplay-policy=no-user-gesture-required",
             f"--remote-debugging-port={port}", f"--user-data-dir={cls.profile.name}",
             "about:blank",
-        ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        ]
+        # GitHub 托管 Linux runner 的用户命名空间限制会阻止 Chrome sandbox 启动。
+        # 仅 CI 的隔离浏览器关闭 sandbox；测试页无外部脚本或真实用户数据。
+        if sys.platform.startswith('linux') and os.environ.get('GITHUB_ACTIONS') == 'true':
+            args.extend(['--no-sandbox', '--disable-dev-shm-usage'])
+        cls.browser_log = open(Path(cls.profile.name) / 'chrome.log', 'wb')
+        cls.addClassCleanup(cls.browser_log.close)
+        cls.proc = subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=cls.browser_log)
         cls.addClassCleanup(cls.stop_browser)
         for _ in range(100):
+            if cls.proc.poll() is not None:
+                raise RuntimeError('浏览器启动失败：' + (Path(cls.profile.name) / 'chrome.log').read_text(encoding='utf-8', errors='replace')[-4000:])
             try:
                 with urllib.request.urlopen(f"http://127.0.0.1:{port}/json/list", timeout=1) as r:
                     pages = json.load(r)
@@ -73,6 +83,7 @@ class PlayerLayoutTests(unittest.TestCase):
         cls.proc.wait(timeout=10)
         if hasattr(cls, 'ws'):
             cls.ws.sock.close()
+        cls.browser_log.close()
         for attempt in range(20):
             try:
                 cls.profile.cleanup()
