@@ -22,8 +22,10 @@ services:
     container_name: hghub
     restart: unless-stopped
     ports:
+      # 只暴露 8081：网页与 API 同源，8080 由容器内部反代，不需要映射到宿主机。
+      # 需要单独调试 8080 时，临时取消下一行注释（仅本机可连）。
       - "${WEB_PORT:-8081}:8081"
-      - "${PROXY_PORT:-8080}:8080"
+      # - "127.0.0.1:${PROXY_PORT:-8080}:8080"
     environment:
       PROXY_PORT: "8080"
       WEB_PORT: "8081"

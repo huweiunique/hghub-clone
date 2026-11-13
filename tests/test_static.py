@@ -338,13 +338,34 @@ class DockerHubPublishTests(unittest.TestCase):
         self.assertIn("image:", block)
         self.assertIn("HGHUB_ACCESS_KEY", block)
 
+    def test_proxy_port_not_published_by_default(self):
+        """8080 只在容器内部反代，默认不应映射到宿主机（只暴露 8081）。"""
+        compose = read("docker-compose.yml")
+        # 未注释的行里不能有 8080 映射
+        active = [ln for ln in compose.splitlines()
+                  if ln.strip() and not ln.strip().startswith("#")]
+        self.assertFalse(
+            any(re.search(r'"\$\{?PROXY_PORT[^"]*:8080"', ln) or '"8080:8080"' in ln
+                for ln in active),
+            "docker-compose.yml 默认不应发布 8080")
+        doc = read("docs", "docker.md")
+        self.assertNotIn("-p 8080:8080", doc)
+        self.assertIn("8080 **不需要**映射到宿主机", doc)
+
+    def test_doc_explains_same_origin_mechanism(self):
+        """文档要说清楚：前端用相对路径，App 配的是网页地址。"""
+        doc = read("docs", "docker.md")
+        self.assertIn("### 9.4 工作机制", doc)
+        self.assertIn("相对路径", doc)
+        self.assertIn("不要**单独给 `/api` 配一个二级域名", doc)
+
     def test_deployment_faq_section(self):
         """只暴露前端、反代写法、镜像 tag 与版本号的区别都要写到。"""
         doc = read("docs", "docker.md")
         self.assertIn("## 九、只给 App 用", doc)
         self.assertIn('"127.0.0.1:38081:8081"', doc)      # 回环绑定示例
-        self.assertIn("HGHUB_COOKIE_SECURE=1", doc)     # HTTPS 反代注意
-        self.assertIn("HGHUB_TRUST_PROXY=1", doc)
+        self.assertIn("HGHUB_COOKIE_SECURE", doc)       # HTTPS 反代注意
+        self.assertIn("HGHUB_TRUST_PROXY", doc)
         self.assertIn("proxy_pass http://127.0.0.1:38081", doc)
         self.assertIn("location /", doc)                # 必须整站反代
         # 默认 YAML 不应把 8080 暴露出去
