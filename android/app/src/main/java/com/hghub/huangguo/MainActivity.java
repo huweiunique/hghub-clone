@@ -128,8 +128,7 @@ public class MainActivity extends Activity {
             return url;
         }
         try {
-            // 纯字符串拼接，不用 Uri.Builder 的新 API（append/removeQueryParameter
-            // 都是 API 29+，本工程 minSdk 24）。
+            // 纯字符串拼接，避免使用 Uri.Builder 的较新方法（本工程 minSdk 24）
             int hash = url.indexOf('#');
             String frag = hash >= 0 ? url.substring(hash) : "";
             String base = hash >= 0 ? url.substring(0, hash) : url;

@@ -184,9 +184,10 @@ class ClientConfigTests(unittest.TestCase):
         # 地址要带上 key 参数（?key=）才会换 Cookie；实现用字符串拼接以兼容 minSdk 24
         self.assertIn('sb.append("key=")', java)
         self.assertIn("android.net.Uri.encode(key)", java)
-        # 不能用到 API 29+ 的 Uri.Builder 方法
-        self.assertNotIn("removeQueryParameter", java)
-        self.assertNotIn("appendEncodedQueryParameter", java)
+        # 不能用到 API 29+ 的 Uri.Builder 方法（只看代码行，忽略注释）
+        code = "\n".join(ln for ln in java.splitlines() if not ln.strip().startswith("//"))
+        self.assertNotIn("removeQueryParameter", code)
+        self.assertNotIn("appendEncodedQueryParameter", code)
 
     def test_android_build_injects_access_key(self):
         sh = read("android", "build-apk-manual.sh")
