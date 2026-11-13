@@ -41,6 +41,8 @@ jobs:
     outputs:
       version: ${{ steps.v.outputs.version }}
       title: ${{ steps.v.outputs.title }}
+      # 产物文件名后缀：正式版为空，Nightly 为 -nightly-YYYYMMDD-<sha7>
+      suffix: ${{ steps.v.outputs.suffix }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -52,9 +54,13 @@ jobs:
           if [ "${{ inputs.channel }}" = "stable" ]; then
             echo "version=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
             echo "title=HGhub ${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+            # 正式版文件名不带后缀：HGhub-1.2.0.8.apk
+            echo "suffix=" >> "$GITHUB_OUTPUT"
           else
             echo "version=nightly" >> "$GITHUB_OUTPUT"
             echo "title=HGhub Nightly · $(date -u +%Y-%m-%d) · ${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+            # Nightly 文件名带日期与提交：HGhub-1.2.0.8-nightly-20261113-4ab18bf.apk
+            echo "suffix=-nightly-$(date -u +%Y%m%d)-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
           fi
 
       - name: 生成发布说明（包含提交与改动）
@@ -81,8 +87,15 @@ jobs:
             echo ""
             echo "### 下载"
             echo ""
-            echo "- \`HGhub-*.apk\`：Android 7.0+，debug 签名，可直接安装"
-            echo "- \`HGhub-*-unsigned.ipa\`：iOS 16+，**未签名**，需 Sideloadly/AltStore 重签后安装"
+            if [ "${{ inputs.channel }}" = "stable" ]; then
+              echo "- \`HGhub-<版本>.apk\`：Android 7.0+，debug 签名，可直接安装"
+              echo "- \`HGhub-<版本>-unsigned.ipa\`：iOS 16+，**未签名**，需 Sideloadly/AltStore 重签后安装"
+            else
+              echo "- \`HGhub-<版本>-nightly-<日期>-<提交>.apk\`：Android 7.0+，可直接安装"
+              echo "- \`HGhub-<版本>-nightly-<日期>-<提交>-unsigned.ipa\`：iOS 16+，**未签名**，需重签后安装"
+              echo ""
+              echo "> 文件名里带日期和提交号，方便区分不同 Nightly 构建。"
+            fi
             echo ""
             echo "### 本次包含的提交"
             echo ""
@@ -136,10 +149,12 @@ jobs:
       - name: 构建 APK
         env:
           APP_URL: ${{ inputs.app_url }}
+          ARTIFACT_SUFFIX: ${{ needs.notes.outputs.suffix }}
         run: |
           bash android/build-apk-manual.sh
           BT="$ANDROID_HOME/build-tools/34.0.0"
           APK=$(ls android/HGhub-*.apk)
+          echo "产物：$APK"
           "$BT/aapt2" dump badging "$APK" | grep -E "package:|sdkVersion|targetSdkVersion"
           "$BT/apksigner" verify --verbose "$APK"
           # 访问密钥不应内置：源码里 APP_ACCESS_KEY 必须为空字符串常量
@@ -165,6 +180,7 @@ jobs:
       - name: 构建未签名 IPA
         env:
           APP_URL: ${{ inputs.app_url }}
+          ARTIFACT_SUFFIX: ${{ needs.notes.outputs.suffix }}
         run: bash ios/build-ipa.sh
 
       - name: 检查 IPA 结构（并确认没有内置密钥）

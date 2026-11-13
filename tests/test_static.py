@@ -273,6 +273,17 @@ class ReleaseChannelTests(unittest.TestCase):
         self.assertIn('APP_ACCESS_KEY = ""', build)
         self.assertIn("AccessKey", build)
 
+    def test_artifact_names_distinguish_channels(self):
+        """Nightly 的包名要带日期和提交号，正式版才用纯版本号。"""
+        build = read(".github", "workflows", "_build.yml")
+        self.assertIn('suffix=-nightly-$(date -u +%Y%m%d)-${GITHUB_SHA::7}', build)
+        self.assertIn("ARTIFACT_SUFFIX", build)
+        # 两个构建脚本都支持后缀
+        self.assertIn("ARTIFACT_SUFFIX", read("android", "build-apk-manual.sh"))
+        self.assertIn("SUFFIX", read("ios", "build-ipa.sh"))
+        self.assertIn('HGhub-1.2.0.8${ARTIFACT_SUFFIX:-}.apk', read("android", "build-apk-manual.sh"))
+        self.assertIn('HGhub-${VERSION}${SUFFIX}-unsigned.ipa', read("ios", "build-ipa.sh"))
+
 
 class DockerHubPublishTests(unittest.TestCase):
     """CI 推送镜像到 Docker Hub：凭据只能来自 Secrets，不能硬编码。"""

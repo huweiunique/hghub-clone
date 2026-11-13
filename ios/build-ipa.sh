@@ -17,6 +17,8 @@ APP_URL="${APP_URL:-}"
 ACCESS_KEY=""
 VERSION="$(/usr/libexec/PlistBuddy -c 'Print :MARKETING_VERSION' "$PROJ_DIR/HGhub.xcodeproj/project.pbxproj" 2>/dev/null | head -1 || true)"
 [ -z "$VERSION" ] && VERSION="1.2.0.8"
+# 渠道后缀由 CI 注入：正式版为空，Nightly 形如 -nightly-20261113-4ab18bf
+SUFFIX="${ARTIFACT_SUFFIX:-}"
 
 echo "[ios] APP_URL=${APP_URL:-<空，首次打开在 App 内填写>}"
 echo "[ios] 访问密钥：不内置，首次打开时在 App 内输入"
@@ -126,9 +128,10 @@ codesign --verify --deep --strict "$APP" 2>>"$PROJ_DIR/build.log" && echo "[ios]
 
 OUT="$ROOT/dist"
 mkdir -p "$OUT"
-rm -f "$OUT/HGhub-${VERSION}-unsigned.ipa"
-(cd "$Work" && /usr/bin/zip -qry "$OUT/HGhub-${VERSION}-unsigned.ipa" Payload)
+IPA_NAME="HGhub-${VERSION}${SUFFIX}-unsigned.ipa"
+rm -f "$OUT/$IPA_NAME"
+(cd "$Work" && /usr/bin/zip -qry "$OUT/$IPA_NAME" Payload)
 
-echo "[ios] 产物：$OUT/HGhub-${VERSION}-unsigned.ipa"
-ls -lh "$OUT/HGhub-${VERSION}-unsigned.ipa"
+echo "[ios] 产物：$OUT/$IPA_NAME"
+ls -lh "$OUT/$IPA_NAME"
 unzip -l "$OUT/HGhub-${VERSION}-unsigned.ipa" | head -15

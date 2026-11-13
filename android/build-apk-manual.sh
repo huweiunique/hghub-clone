@@ -79,9 +79,14 @@ if [ ! -f "$KEYSTORE" ]; then
     -dname "CN=Android Debug,O=Android,C=US" -noprompt
 fi
 zipalign -f -p 4 "$W/app-with-dex.apk" "$W/app-aligned.apk"
+
+# 产物名：HGhub-<版本>[-<渠道后缀>].apk
+#   正式版：HGhub-1.2.0.8.apk
+#   Nightly：HGhub-1.2.0.8-nightly-20261113-4ab18bf.apk（由 CI 传 ARTIFACT_SUFFIX）
+APK_NAME="HGhub-1.2.0.8${ARTIFACT_SUFFIX:-}.apk"
 apksigner sign --ks "$KEYSTORE" --ks-pass pass:android --key-pass pass:android \
-  --out "$ROOT/HGhub-1.2.0.8.apk" "$W/app-aligned.apk"
-apksigner verify "$ROOT/HGhub-1.2.0.8.apk"
-aapt2 dump badging "$ROOT/HGhub-1.2.0.8.apk" | grep -E "package:|sdkVersion|targetSdkVersion|launchable-activity"
-ls -la "$ROOT/HGhub-1.2.0.8.apk"
-unzip -l "$ROOT/HGhub-1.2.0.8.apk" | grep -E "assets/|classes.dex"
+  --out "$ROOT/$APK_NAME" "$W/app-aligned.apk"
+apksigner verify "$ROOT/$APK_NAME"
+aapt2 dump badging "$ROOT/$APK_NAME" | grep -E "package:|sdkVersion|targetSdkVersion|launchable-activity"
+ls -la "$ROOT/$APK_NAME"
+unzip -l "$ROOT/$APK_NAME" | grep -E "assets/|classes.dex"
