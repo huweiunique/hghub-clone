@@ -184,14 +184,26 @@ jobs:
     needs: [notes, apk, ipa]
     runs-on: ubuntu-latest
     steps:
-      # v4 并发下载 3 个 artifact 时偶发 "Artifact download failed after 5 retries"
-      # （三个其实都下载成功了，是它内部并发/重试的误判）。v5 + 串行下载更稳。
-      - uses: actions/download-artifact@v5
+      # 不用批量/合并模式：多个 artifact 并发下载时会偶发
+      # "Artifact download failed after 5 retries"（实际都下成功了，是内部重试误判）。
+      # 改为逐个显式下载，每个指定准确的 name 和 path。
+      - name: 下载 APK
+        uses: actions/download-artifact@v5
         with:
+          name: apk
           path: dist
-          merge-multiple: true
-          # 一次下 3 个，串行避免并发问题
-          max-parallel: 1
+
+      - name: 下载 IPA
+        uses: actions/download-artifact@v5
+        with:
+          name: ipa-unsigned
+          path: dist
+
+      - name: 下载发布说明
+        uses: actions/download-artifact@v5
+        with:
+          name: release-notes
+          path: dist
 
       - name: 发布到 GitHub Release
         uses: softprops/action-gh-release@v2
