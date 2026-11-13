@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="com.hghub.huangguo"
+    package="com.hghub.huangguoai"
     android:versionCode="1208"
     android:versionName="1.2.0.8">
 

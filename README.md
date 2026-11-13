@@ -114,7 +114,7 @@ http://<你的服务器IP>:8081/
 │   ├── index.html               # 复刻版网页本体（单文件：首页/分类/搜索/榜单/
 │   │                            #   帖子/详情/登录/播放器，hls.js 播 HLS）
 │   └── server.py                # 网页服务（8081 端口：静态页 + 反代 + 封面解密）
-├── android/                     # Android WebView 壳工程（包名 com.hghub.huangguo）
+├── android/                     # Android WebView 壳工程（包名 com.hghub.huangguoai）
 │   ├── build-apk-manual.sh      # 手动构建 APK 的脚本（不用 Gradle 也能编）
 │   ├── build.gradle             # Gradle 构建配置
 │   ├── settings.gradle
@@ -330,7 +330,7 @@ Gradle 构建时用 `-PappUrl=http://YOUR_SERVER_IP:8081/`，
   返回真实上游列表；`/proxy/img` 对真实封面返回 `image/jpeg`，
   解密后是合法 JPEG（`FFD8FFE0` 开头，174816 字节）；非图床域名返回 403
 - 封面解密：`openssl` 用公开协议参数解密线上封面，得到合法 JPEG
-- APK：`apksigner verify` 通过；包名 `com.hghub.huangguo`、版本 1.2.0.3、
+- APK：`apksigner verify` 通过；包名 `com.hghub.huangguoai`、版本 1.2.0.3、
   minSdk 24、targetSdk 34、竖屏、入口 `MainActivity`；
   manifest 里确认 `usesCleartextTraffic=true`；
   dex 里确认内置地址是你构建时注入的 `APP_URL`

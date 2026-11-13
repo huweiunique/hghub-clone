@@ -80,3 +80,4 @@ python tests/run_all.py                       # 离线用例全绿
 - [docs/deploy.md](docs/deploy.md) — Docker 构建/运行/排错
 - [docs/release.md](docs/release.md) — APK / IPA 构建与发版
 - [docs/pitfalls.md](docs/pitfalls.md) — 踩过的坑清单（改代码前先看）
+- [docs/comparison.md](docs/comparison.md) — 与 LNPANDY/HGhub-MacOS-iOS-Version 的对比（架构/流量/功能）

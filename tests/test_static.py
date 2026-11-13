@@ -111,8 +111,26 @@ class AndroidProjectTests(unittest.TestCase):
         self.manifest = read("android", "app", "src", "main", "AndroidManifest.xml")
 
     def test_package_and_version(self):
-        self.assertIn('package="com.hghub.huangguo"', self.manifest)
+        self.assertIn('package="com.hghub.huangguoai"', self.manifest)
         self.assertIn('android:versionName="1.2.0.8"', self.manifest)
+
+    def test_package_name_is_ours_not_upstream(self):
+        """包名不能和上游原版 / LNPANDY 版相同，否则设备上会互相覆盖。"""
+        ours = "com.hghub.huangguoai"
+        gradle = read("android", "app", "build.gradle")
+        self.assertIn(f'namespace = "{ours}"', gradle)
+        self.assertIn(f'applicationId = "{ours}"', gradle)
+        ios = read("ios", "HGhub", "HGhub.xcodeproj", "project.pbxproj")
+        self.assertIn(f"PRODUCT_BUNDLE_IDENTIFIER = {ours};", ios)
+        # 不能被上游的 com.hghub.huangguo 冒充（\b 避免误判 huangguoai）
+        for rel in ("android/app/src/main/AndroidManifest.xml", "ios/HGhub/HGhub.xcodeproj/project.pbxproj",
+                    "android/app/build.gradle"):
+            text = read(*rel.split("/"))
+            self.assertNotRegex(text, r"com\.hghub\.huangguo(?!ai)\b", rel)
+        # Java 目录必须与包名一致
+        self.assertTrue(os.path.exists(os.path.join(
+            REPO_ROOT, "android", "app", "src", "main", "java", "com", "hghub", "huangguoai",
+            "MainActivity.java")))
 
     def test_portrait(self):
         self.assertIn('android:screenOrientation="portrait"', self.manifest)
@@ -174,7 +192,7 @@ class ClientConfigTests(unittest.TestCase):
     """客户端（APK / IPA）必须能配置「后端地址 + 访问密钥」，且 Docker 侧能通过环境变量注入密钥。"""
 
     def test_android_has_url_and_key_config(self):
-        java = read("android", "app", "src", "main", "java", "com", "hghub", "huangguo", "MainActivity.java")
+        java = read("android", "app", "src", "main", "java", "com", "hghub", "huangguoai", "MainActivity.java")
         self.assertIn("BuildConfig.APP_URL", java)
         self.assertIn("BuildConfig.APP_ACCESS_KEY", java)
         self.assertIn("KEY_ACCESS", java)
@@ -215,7 +233,7 @@ class ClientConfigTests(unittest.TestCase):
 
     def test_android_can_reopen_settings(self):
         """首次没填密钥也要能补填：长按返回键回到设置页。"""
-        java = read("android", "app", "src", "main", "java", "com", "hghub", "huangguo", "MainActivity.java")
+        java = read("android", "app", "src", "main", "java", "com", "hghub", "huangguoai", "MainActivity.java")
         self.assertIn("onKeyDown", java)
         self.assertIn("showUrlSetup()", java)
         self.assertIn("KEYCODE_BACK", java)
@@ -404,6 +422,41 @@ class ReverseProxyTests(unittest.TestCase):
         server = read("web", "server.py")
         self.assertIn('os.environ.get("PROXY_BASE", "http://127.0.0.1:8080")', server)
 
+
+class AppKeyFlowTests(unittest.TestCase):
+    """App 里填过密钥后，页面不应再弹窗要求输入（踩过的 bug）。"""
+
+    def setUp(self):
+        self.js = read("local_ext", "web_patch.js")
+
+    def test_reads_key_from_url(self):
+        """页面必须能从自己的 URL 取 ?key=（App 壳拼在入口地址上）。"""
+        self.assertIn("function keyFromURL", self.js)
+        self.assertIn("new URLSearchParams(location.search)", self.js)
+
+    def test_exchanges_key_before_prompting(self):
+        """先尝试用 URL 里的 key 换 Cookie，成功就 return，不弹窗。"""
+        probe = self.js.split("async function probe()", 1)[1]
+        head = probe.split("askKey()", 1)[0]
+        self.assertIn("keyFromURL()", head)
+        self.assertIn("exchangeKey(urlKey)", head)
+        self.assertLess(head.index("exchangeKey(urlKey)"), head.index("hg_need_key"))
+
+    def test_exchange_uses_credentials(self):
+        """换 Cookie 的请求必须带 credentials，否则 Set-Cookie 被忽略。"""
+        fn = self.js.split("async function exchangeKey", 1)[1].split("async function probe", 1)[0]
+        self.assertIn("credentials: 'same-origin'", fn)
+
+    def test_removes_key_from_address_bar(self):
+        """换完 Cookie 要把地址栏的 key 去掉，避免留在历史/Referer。"""
+        self.assertIn("history.replaceState", self.js)
+        self.assertIn("searchParams.delete('key')", self.js)
+
+    def test_shells_inject_key_into_url(self):
+        ios = read("ios", "HGhub", "HGhub", "App.swift")
+        self.assertIn('URLQueryItem(name: "key", value: accessKey)', ios)
+        java = read("android", "app", "src", "main", "java", "com", "hghub", "huangguoai", "MainActivity.java")
+        self.assertIn('sb.append("key=")', java)
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

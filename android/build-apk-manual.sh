@@ -32,10 +32,10 @@ FALLBACK_URL_JAVA=$(python3 -c 'import json,sys; print(json.dumps(sys.argv[1])[1
 
 mkdir -p "$W/gen/com/hghub/huangguo"
 cat > "$W/gen/com/hghub/huangguo/BuildConfig.java" <<EOF
-package com.hghub.huangguo;
+package com.hghub.huangguoai;
 public final class BuildConfig {
     public static final boolean DEBUG = true;
-    public static final String APPLICATION_ID = "com.hghub.huangguo";
+    public static final String APPLICATION_ID = "com.hghub.huangguoai";
     public static final String BUILD_TYPE = "debug";
     public static final int VERSION_CODE = 1208;
     public static final String VERSION_NAME = "1.2.0.8";

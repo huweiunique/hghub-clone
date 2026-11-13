@@ -1,4 +1,4 @@
-package com.hghub.huangguo;
+package com.hghub.huangguoai;
 
 import android.annotation.SuppressLint;
 import android.app.Activity;

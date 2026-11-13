@@ -16,7 +16,48 @@
     probe();
   }
 
+  /** 从页面 URL 里取 ?key= 参数（App 壳/分享链接可能带） */
+  function keyFromURL() {
+    try {
+      return new URLSearchParams(location.search).get('key') || '';
+    } catch (e) { return ''; }
+  }
+
+  /**
+   * 用 ?key= 换 Cookie。
+   * 关键：App 壳（尤其 WKWebView）跟随 302 时可能没把 Set-Cookie 落进页面容器，
+   * 所以这里主动发一次请求，让浏览器/WebView 自己处理 Set-Cookie，
+   * 而不是依赖壳的跳转行为。
+   */
+  async function exchangeKey(key) {
+    if (!key) return false;
+    try {
+      // 先验证 key 对错（带 key 请求受保护接口，200 即正确）
+      var probe = await fetch('/api/site/categories/video?key=' + encodeURIComponent(key),
+        { headers: { 'Accept': 'application/json' }, cache: 'no-store' });
+      if (probe.status === 401) return false;
+      // 再走首页换 Cookie（credentials 必须带上，否则 Set-Cookie 被忽略）
+      await fetch('/?key=' + encodeURIComponent(key), { credentials: 'same-origin', cache: 'no-store' });
+      localStorage.setItem('hg_key_ok_' + location.host, '1');
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
   async function probe() {
+    // 1) URL 里带了 key（App 壳注入的）：先换 Cookie，换成功就不用弹窗
+    var urlKey = keyFromURL();
+    if (urlKey && await exchangeKey(urlKey)) {
+      // 去掉地址栏里的 key，避免留在历史记录/Referer
+      try {
+        var u = new URL(location.href);
+        u.searchParams.delete('key');
+        history.replaceState(null, '', u.pathname + (u.search ? u.search : '') + u.hash);
+      } catch (e) {}
+      return;
+    }
+
     if (localStorage.getItem('hg_need_key') !== '1') {
       try {
         var r = await fetch('/api/site/categories/video', {
@@ -73,17 +114,11 @@
       if (!key) return;
       btn.disabled = true;
       try {
-        // 后端对 /api/*?key= 校验通过后直接放行；再用 /?key= 换 Cookie
-        var r = await fetch('/api/site/categories/video?key=' + encodeURIComponent(key), {
-          headers: { 'Accept': 'application/json' }, cache: 'no-store'
-        });
-        if (r.status === 401) {
+        if (!await exchangeKey(key)) {
           err.style.display = 'block';
           btn.disabled = false;
           return;
         }
-        await fetch('/?key=' + encodeURIComponent(key), { credentials: 'same-origin' });
-        localStorage.setItem('hg_key_ok_' + location.host, '1');
         wrap.remove();
         location.reload();
       } catch (e) {

@@ -3,11 +3,11 @@ plugins {
 }
 
 android {
-    namespace = "com.hghub.huangguo"
+    namespace = "com.hghub.huangguoai"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.hghub.huangguo"
+        applicationId = "com.hghub.huangguoai"
         minSdk = 24
         targetSdk = 34
         versionCode = 1208
