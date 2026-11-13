@@ -67,7 +67,7 @@ python tests/run_all.py --online --web http://127.0.0.1:18081 --proxy http://127
 | 封面全破图 | 镜像缺 openssl（自己改过镜像？） | `docker exec hghub openssl version` 必须能打出版本 |
 | 页面一直"加载中" | 上游接口慢（3–8 秒是常态），或容器出网受限 | `docker logs hghub` 看是否有 `upstream HTTP` 错误 |
 | `播放参数无效` | 请求体带了 `id`/`ep` | 路由已按空 `{}` 实现，别改 |
-| 8080 302/401 | 开了访问密钥 | 用 `/?key=` 打开，或带上 Cookie |
+| 8080 200 但接口 401 | 开了访问密钥 | 用 `/?key=` 打开（首页 200 + Set-Cookie），或带上 Cookie |
 
 ## 发布到 Docker Hub？
 

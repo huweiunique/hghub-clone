@@ -17,6 +17,13 @@
   未启用密钥（HGHUB_ACCESS_KEY 为空）时 pre_serve 恒返回放行，
   且额外头为空 —— 对上游行为零影响。
 
+  首屏带 ?key= 时的握手：**不再 302**，而是在首页 200 响应上直接带
+  Set-Cookie，URL 里的 ?key= 保留给页面脚本。原因：WKWebView（iOS App 壳）
+  跟随 302 时经常丢弃响应里的 Set-Cookie，而 302 又把 ?key= 清掉了，
+  前端既拿不到 Cookie 也拿不到 key，只能每次启动重复弹输入框。
+  现在由 local_ext/web_patch.js 主动 fetch 一次换 Cookie，成功后
+  history.replaceState 把地址栏里的 key 去掉。
+
 环境变量：
   HGHUB_ACCESS_KEY    访问密钥（openssl rand -hex 32 生成），为空即关闭
   HGHUB_ALLOW_IPS     可选，逗号分隔的来源 IP 白名单（与密钥同时生效）
@@ -113,16 +120,17 @@ def pre_serve(handler, method, path=None, extra_paths=()):
     if not ENABLED:
         return (0, b"", "", [])
 
-    # 首屏带 ?key=（正确）：下发 Cookie + 302 去掉 URL 里的 key，
-    # 避免密钥留在浏览器历史/Referer 里。必须在"公共路径放行"之前处理。
+    # 首屏带 ?key=（正确）：首页照常返回 200，同时下发 Cookie。
+    # 不做 302：WKWebView 跟随 302 时会丢 Set-Cookie，且 302 清掉了 ?key=，
+    # 前端既没有 Cookie 也没有 key，只能重复弹框。保留 ?key= 让
+    # web_patch.js 用 fetch 换 Cookie，成功后由页面脚本清掉地址栏。
     if method == "GET" and p in ("/", "/index.html"):
         given = (qs.get("key") or [""])[0]
         if given:
             if not hmac.compare_digest(given, ACCESS_KEY):
                 log.warning("access key rejected from %s", _client_ip(handler))
                 return (0, b"", "", [])  # 首页照常打开，前端会弹输入框
-            return (302, b"", "text/plain; charset=utf-8",
-                    [auth_cookie_header(handler), ("Location", "/")])
+            return (0, b"", "", [auth_cookie_header(handler)])
 
     # 公共路径免鉴权：首页/静态资源/local_ext（页面自己的脚本）
     public = PUBLIC_PATHS | set(extra_paths)

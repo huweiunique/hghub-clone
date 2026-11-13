@@ -13,7 +13,33 @@
   'use strict';
 
   function boot() {
+    installStyles();
     probe();
+  }
+
+  /** App 壳（WKWebView/Android WebView）里 UA 不含 Safari 字样，用来加仅壳内生效的样式 */
+  function isAppShell() {
+    try {
+      if (/[?&]app=1\b/.test(location.search)) return true;
+      var ua = navigator.userAgent || '';
+      return /iPhone|iPad|iPod/.test(ua) && !/Safari\//.test(ua);
+    } catch (e) { return false; }
+  }
+
+  /** 只往页面里追加 <style>，不修改上游正文；网页端和 App 壳表现各自正确 */
+  function installStyles() {
+    if (document.getElementById('__hg_style')) return;
+    if (isAppShell()) document.body.classList.add('hg-app');
+    var st = document.createElement('style');
+    st.id = '__hg_style';
+    st.textContent = [
+      /* 行内图标：.ic-svg 默认 display:block，会把简介/统计里的 ★ 挤到单独一行 */
+      '.meta .ic-svg,.detail-stats .ic-svg,.card .t p .ic-svg,',
+      '.rankrow p .ic-svg,.post .meta .ic-svg{display:inline-block;vertical-align:-2px}',
+      /* App 壳右上角的齿轮浮层会压住“搜索”按钮，给顶栏右侧留出空间 */
+      'body.hg-app header{padding-right:78px}'
+    ].join('');
+    document.head.appendChild(st);
   }
 
   /** 从页面 URL 里取 ?key= 参数（App 壳/分享链接可能带） */
@@ -38,45 +64,44 @@
       if (probe.status === 401) return false;
       // 再走首页换 Cookie（credentials 必须带上，否则 Set-Cookie 被忽略）
       await fetch('/?key=' + encodeURIComponent(key), { credentials: 'same-origin', cache: 'no-store' });
-      localStorage.setItem('hg_key_ok_' + location.host, '1');
+      localStorage.removeItem('hg_need_key');
       return true;
     } catch (e) {
       return false;
     }
   }
 
+  /** 去掉地址栏里的 key，避免留在历史记录/Referer */
+  function stripKey() {
+    try {
+      var u = new URL(location.href);
+      u.searchParams.delete('key');
+      history.replaceState(null, '', u.pathname + (u.search ? u.search : '') + u.hash);
+    } catch (e) {}
+  }
+
   async function probe() {
     // 1) URL 里带了 key（App 壳注入的）：先换 Cookie，换成功就不用弹窗
     var urlKey = keyFromURL();
     if (urlKey && await exchangeKey(urlKey)) {
-      // 去掉地址栏里的 key，避免留在历史记录/Referer
-      try {
-        var u = new URL(location.href);
-        u.searchParams.delete('key');
-        history.replaceState(null, '', u.pathname + (u.search ? u.search : '') + u.hash);
-      } catch (e) {}
+      stripKey();
       return;
     }
 
-    if (localStorage.getItem('hg_need_key') !== '1') {
-      try {
-        var r = await fetch('/api/site/categories/video', {
-          headers: { 'Accept': 'application/json' }, cache: 'no-store'
-        });
-        if (r.status !== 401) return;          // 没开密钥，什么都不做
-        localStorage.setItem('hg_need_key', '1');
-      } catch (e) {
-        return;                                 // 网络问题，别打扰用户
+    // 2) 无论本地标记如何，都实测一次：Cookie 可能已经由上次登录/App 壳写好。
+    //    以前 hg_need_key 一旦残留就会无条件弹框，造成“App 里配置过密钥，
+    //    进页面还要再输一次”。现在以服务端实际返回为准。
+    try {
+      var r = await fetch('/api/site/categories/video', {
+        headers: { 'Accept': 'application/json' }, cache: 'no-store'
+      });
+      if (r.status !== 401) {                   // 没开密钥 / Cookie 仍然有效
+        localStorage.removeItem('hg_need_key');
+        return;
       }
-    }
-    if (localStorage.getItem('hg_key_ok_' + location.host) === '1') {
-      // 之前登录过：确认 Cookie 还有效，失效就重新问
-      try {
-        var r2 = await fetch('/api/site/categories/video', {
-          headers: { 'Accept': 'application/json' }, cache: 'no-store'
-        });
-        if (r2.status !== 401) return;
-      } catch (e) { return; }
+      localStorage.setItem('hg_need_key', '1');
+    } catch (e) {
+      return;                                   // 网络问题，别打扰用户
     }
     askKey();
   }

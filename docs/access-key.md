@@ -12,11 +12,16 @@
 ## 实际实现
 
 ```
-GET /?key=xxx  ── 校验通过 ──▶ 302 Location: /  +  Set-Cookie: hghub_auth=<HMAC>
-                                     │
+GET /?key=xxx  ── 校验通过 ──▶ 200 首页 + Set-Cookie: hghub_auth=<HMAC>（不 302）
+                                     │  页面脚本再 fetch 一次换 Cookie，
+                                     │  成功后 history.replaceState 去掉地址栏 key
                                      ▼
                     之后所有 /api/*、/proxy/* 凭 Cookie 放行
 ```
+
+> **为什么不用 302**：WKWebView（iOS App 壳）跟随 302 时经常丢弃响应里的
+> `Set-Cookie`，而 302 又把 `?key=` 清掉了 —— 结果是 App 里每次启动都重复
+> 弹输入框。现在首页直接 200 带 Cookie，`?key=` 保留到页面脚本处理完为止。
 
 - Cookie 值是 `HMAC-SHA256(KEY, "hghub-access-v1")`，**不是明文 key**：
   即使 Cookie 被截获，也拿不到可以重新签发的密钥；换 key 后旧 Cookie 立即失效。
@@ -53,4 +58,4 @@ GET /?key=xxx  ── 校验通过 ──▶ 302 Location: /  +  Set-Cookie: hgh
 
 - 逻辑：`local_ext/access_key.py`（`pre_serve` 是唯一入口）
 - 前端：`local_ext/web_patch.js`
-- 测试：`tests/test_auth.py`（10 个用例覆盖白名单、伪造 Cookie、IP 白名单、302 换 Cookie）
+- 测试：`tests/test_auth.py`（覆盖白名单、伪造 Cookie、IP 白名单、200+Set-Cookie 换 Cookie）

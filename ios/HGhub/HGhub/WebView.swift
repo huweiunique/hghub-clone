@@ -119,7 +119,8 @@ struct SetupView: View {
 
         var probe = URLComponents(url: base, resolvingAgainstBaseURL: false)!
         probe.path = "/api/site/categories/video"
-        probe.queryItems = settings.accessKey.isEmpty ? nil : [URLQueryItem(name: "key", value: settings.accessKey)]
+        let key = settings.normalizedAccessKey
+        probe.queryItems = key.isEmpty ? nil : [URLQueryItem(name: "key", value: key)]
         guard let probeURL = probe.url else { testing = false; return }
 
         let cfg = URLSessionConfiguration.ephemeral

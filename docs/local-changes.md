@@ -26,7 +26,7 @@ tools/
 | `web/server.py` | import + `LOCAL_EXT_DIR` 常量 | `from http.server ...` 之后 |
 | `web/server.py` | `do_GET` 调 `pre_serve` | 解析完 path/qs 之后 |
 | `web/server.py` | `do_POST` 调 `pre_serve` | 解析完 path 之后 |
-| `web/server.py` | `_send` 写出额外头（Set-Cookie/Location） | 写完 CORS 头之后 |
+| `web/server.py` | `_send` 写出额外头（Set-Cookie） | 写完 CORS 头之后 |
 | `web/server.py` | `/local_ext/<file>.js` 静态路由 | `if path == "/hls.min.js"` 之前 |
 | `web/index.html` | 一行 `<script src="/local_ext/web_patch.js">` | `</head>` 之前 |
 | `android/.../assets/hghub/index.html` | 同上 | `</head>` 之前 |

@@ -7,7 +7,8 @@
   * 不开密钥时（默认）所有接口照旧可用 —— 不破坏原有部署
   * 开密钥后：/health、/、/hls.min.js 免鉴权（探活和首屏要能用）
   * 其余接口无 key / 错误 key -> 401
-  * GET /?key=<正确> -> 302 + Set-Cookie，后续只看 Cookie 就能访问
+  * GET /?key=<正确> -> 200 + Set-Cookie（不 302，WKWebView 会丢 302 的 Cookie），
+    后续只看 Cookie 就能访问
   * POST /api/play 同样受保护
 """
 
@@ -110,22 +111,16 @@ class AccessKeyTests(unittest.TestCase):
         self.assertEqual(status, 401)
 
     # ---------- 登录换 Cookie ----------
-    def test_key_bootstraps_cookie_and_redirects(self):
-        # 用 curl 风格的"不跟随重定向"检查 302 + Set-Cookie
-        class NoRedirect(urllib.request.HTTPRedirectHandler):
-            def redirect_request(self, *a, **k):
-                return None
+    def test_key_bootstraps_cookie_without_redirect(self):
+        """首屏带 key 必须直接在 200 上给 Cookie，不能 302。
 
-        opener = urllib.request.build_opener(NoRedirect)
-        try:
-            r = opener.open(self.srv_key.base + f"/?key={KEY}", timeout=15)
-            status, headers = r.status, r.headers
-        except urllib.error.HTTPError as e:
-            status, headers = e.code, e.headers
-        # 注：如果 URL.path 恰好被 parse 成 /local_ext/ 前缀那类公共路径，
-        # 这里不会 302（静态资源免鉴权，本来就不需要 Cookie）。
-        self.assertEqual(status, 302, f"status={status}")
-        self.assertEqual(headers.get("Location"), "/")
+        回归背景：WKWebView 跟随 302 时经常丢 Set-Cookie，而 302 又把 ?key=
+        清掉了，App 壳里于是既没 Cookie 也没 key，每次启动都重复弹输入框。
+        页面脚本（local_ext/web_patch.js）需要 URL 里保留 ?key= 才能自己换 Cookie。
+        """
+        status, _, headers = raw_get(self.srv_key.base, f"/?key={KEY}")
+        self.assertEqual(status, 200, f"status={status}")
+        self.assertIsNone(headers.get("Location"), "不应再 302")
         cookie = headers.get("Set-Cookie", "")
         self.assertIn("hghub_auth=", cookie)
         self.assertIn("HttpOnly", cookie)

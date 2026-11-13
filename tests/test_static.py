@@ -187,6 +187,21 @@ class LocalPatchTests(unittest.TestCase):
         self.assertEqual(access_key.pre_serve(None, "GET", path="/api/videos")[0], 0)
         self.assertEqual(access_key.pre_serve(None, "POST", path="/api/play")[0], 0)
 
+    def test_auth_handshake_does_not_redirect(self):
+        """首屏换 Cookie 必须是 200 + Set-Cookie，不能 302（WKWebView 会丢 Cookie）。"""
+        src = read("local_ext", "access_key.py")
+        self.assertNotIn('"Location", "/"', src)
+        self.assertIn("auth_cookie_header(handler)", src)
+
+    def test_frontend_patch_fixes_known_shell_bugs(self):
+        js = read("local_ext", "web_patch.js")
+        # 不能依赖 hg_key_ok_* 本地标记：Cookie 有效时就不该弹框
+        self.assertNotIn("hg_key_ok_", js)
+        self.assertIn("localStorage.removeItem('hg_need_key')", js)
+        # 行内 ★ 不再另起一行；App 壳顶栏给齿轮留空间
+        self.assertIn(".ic-svg{display:inline-block", js)
+        self.assertIn("body.hg-app header{padding-right:78px}", js)
+
 
 class ClientConfigTests(unittest.TestCase):
     """客户端（APK / IPA）必须能配置「后端地址 + 访问密钥」，且 Docker 侧能通过环境变量注入密钥。"""
@@ -454,7 +469,9 @@ class AppKeyFlowTests(unittest.TestCase):
 
     def test_shells_inject_key_into_url(self):
         ios = read("ios", "HGhub", "HGhub", "App.swift")
-        self.assertIn('URLQueryItem(name: "key", value: accessKey)', ios)
+        # 注入前统一去掉首尾空白，避免粘贴带空格导致服务端判错
+        self.assertIn("trimmingCharacters(in: .whitespacesAndNewlines)", ios)
+        self.assertIn('URLQueryItem(name: "key", value: key)', ios)
         java = read("android", "app", "src", "main", "java", "com", "hghub", "huangguoai", "MainActivity.java")
         self.assertIn('sb.append("key=")', java)
 

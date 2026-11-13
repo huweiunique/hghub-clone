@@ -51,13 +51,20 @@ final class AppSettings: ObservableObject {
         return value
     }
 
+    /// 密钥去掉首尾空白/换行：粘贴时最容易带上，服务端按原样比对会判错，
+    /// 表现为“网页里能进、App 里一直重复弹框”。
+    var normalizedAccessKey: String {
+        accessKey.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     /// 拼出带密钥的入口地址（首页用 ?key= 换 Cookie，之后所有请求凭 Cookie）
     var entryURL: URL? {
         guard !appURL.isEmpty, var comps = URLComponents(string: appURL) else { return nil }
-        if !accessKey.isEmpty {
+        let key = normalizedAccessKey
+        if !key.isEmpty {
             var q = comps.queryItems ?? []
             q.removeAll { $0.name == "key" }
-            q.append(URLQueryItem(name: "key", value: accessKey))
+            q.append(URLQueryItem(name: "key", value: key))
             comps.queryItems = q
         }
         return comps.url
