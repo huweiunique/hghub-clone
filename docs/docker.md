@@ -310,8 +310,9 @@ services:
     container_name: hghub
     restart: unless-stopped
     ports:
+      # 只暴露 8081：网页 + API 同源，8080 由容器内部反代，无需对外
+      # 前面有 Nginx/1Panel 反代时改成 "127.0.0.1:38081:8081"（见第 9 节）
       - "8081:8081"
-      - "8080:8080"
     environment:
       TZ: Asia/Shanghai
       # 访问密钥：任意字符串，留空则不鉴权
@@ -432,4 +433,155 @@ docker compose -f /opt/1panel/docker/compose/hghub/docker-compose.yml up -d
 | 页面能开但封面全破图 | 镜像缺 openssl（自己改过镜像） | 改用本仓库 `Dockerfile` 构建的镜像 |
 | 一直弹「需要访问密钥」 | 输入的 key 与服务端不一致 | 核对 `docker exec hghub env \| grep HGHUB` |
 | 改了 YAML 没生效 | 没重建容器 | 点「重启」或「重新部署」，不要只改文件 |
+## 九、只给 App 用：端口暴露、反代与域名
 
+这一节回答三个最容易踩的部署问题。
+
+### 9.1 只用 App 访问时，要不要暴露 8080？
+
+**不需要。** 前端页面和后端 API 是**同一个服务**（8081）：
+
+- 页面 `/`、`/hls.min.js`、`/local_ext/*` 由 8081 提供；
+- `/api/*`、`/proxy/*` 由 **8081 自己**在容器内反代到 `127.0.0.1:8080`；
+- App（APK/IPA）里内置的地址就是网页地址，它加载的页面会用**相对路径**请求 API。
+
+所以对外只需要 8081 一个端口。8080 只在容器内部用，**不用映射到宿主机**，
+也不用对外开放。少开一个端口，少一份暴露面：
+
+```yaml
+    ports:
+      - "38081:8081"        # 只暴露这一个就够
+    # 不要写 8080 的映射
+```
+
+> 想在本机调试播放代理时才临时加 `"127.0.0.1:38080:8080"`。
+
+### 9.2 写成 `127.0.0.1:38081:8081` 后，访问地址会变成 127.0.0.1 吗？
+
+**不会。** 这是端口映射的写法，不是地址配置：
+
+```
+127.0.0.1:38081:8081
+└─宿主机绑定IP─┘ └端口┘└容器内端口┘
+```
+
+- 左边 `127.0.0.1` 表示**只有本机能连**这个端口，局域网和外网**都连不上**；
+- 前端/App 里的地址必须填**别人能访问到的地址**，比如 `https://xxx.com/`
+  或 `http://<服务器公网IP>:38081/`；
+- 页面内部请求 API 用的是相对路径（`/api/videos`），会自动拼在当前访问的域名后面，
+  **不需要另外配置一个"后端地址"**。
+
+实测（本仓库验证过）：
+
+| 访问方式 | 结果 |
+| --- | --- |
+| `127.0.0.1:38081/health` | 200（本机可以） |
+| `192.168.x.x:38081/health` | 连接失败（局域网也不行） |
+| 外网 `IP:38081` | 连接失败 |
+
+**什么时候用 `127.0.0.1:` 绑定？** 就是你现在这种场景：**前面有 Nginx/Caddy/1Panel
+网站反代**，让反代去连本机的 38081，而对外只走 443。这样容器端口不对公网开放，更安全。
+
+### 9.3 你要的反代结构（推荐）
+
+```
+App / 浏览器
+   │ https://xxx.com/
+   ▼
+Nginx / Caddy / 1Panel 网站（443）
+   │ proxy_pass http://127.0.0.1:38081
+   ▼
+hghub 容器（8081 = 网页 + API 同源）
+   │ 容器内 http://127.0.0.1:8080
+   ▼
+播放代理（8080，不对外）
+```
+
+对应的 compose：
+
+```yaml
+services:
+  hghub:
+    image: <你的DockerHub用户名>/hghub:nightly
+    container_name: hghub
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:38081:8081"     # 只给本机反代连
+    environment:
+      TZ: Asia/Shanghai
+      HGHUB_ACCESS_KEY: "你的密钥"
+      # 反代后面：让服务从 X-Forwarded-For 取真实 IP
+      HGHUB_TRUST_PROXY: "1"
+      # HTTPS 访问：Cookie 带 Secure
+      HGHUB_COOKIE_SECURE: "1"
+```
+
+**Nginx 反代示例**（关键是把前缀一起转过去，不要只转 `/api`）：
+
+```nginx
+server {
+    listen 443 ssl http2;
+    server_name xxx.com;
+
+    # ssl_certificate ...; ssl_certificate_key ...;
+
+    location / {
+        proxy_pass http://127.0.0.1:38081;
+        proxy_http_version 1.1;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        # HLS 分片较大，别限制太小
+        proxy_buffering off;
+        proxy_read_timeout 120s;
+    }
+}
+```
+
+> ⚠️ 常见错误：只反代了 `https://xxx.com/api`，没有反代 `/`。
+> 这样 App 打开会白屏——页面本身（`/`、`/hls.min.js`、`/local_ext/web_patch.js`）
+> 也必须在同一个域名下能取到。**整个站 `location /` 一起反代**，API 同源才成立。
+
+**1Panel 里怎么做**：网站 → 创建「反向代理」网站 → 代理地址填
+`http://127.0.0.1:38081` → 开启 HTTPS（ACM 或上传证书）。
+
+### 9.4 前端会不会直连后端地址？
+
+**不会直连 `IP:8080`，也不需要额外配置"后端地址"。** 实测页面的网络请求：
+
+| 目标 | 说明 |
+| --- | --- |
+| `http://<你访问的域名或IP>`（同源） | 全部 `/api/*`、`/proxy/*`、封面、hls.js |
+| `https://yd-lphu-long.hzjvlo.cn` 等 CDN 域名 | 仅**视频分片**，由播放器直连（你没法改） |
+
+也就是说：**App 里只填一个地址**（网页地址，例如 `https://xxx.com/`），
+API 自动走同源。只有极少数情况才需要 `HGHUB_APP_URL` 之类的额外配置——
+例如你想让 App 内置一个地址。
+
+### 9.5 用了 HTTPS 反代后的注意事项
+
+| 项 | 说明 |
+| --- | --- |
+| `HGHUB_COOKIE_SECURE=1` | 浏览器在 https 下才会带上 Cookie，否则输入密钥后仍然 401 |
+| `HGHUB_TRUST_PROXY=1` | 开了 IP 白名单（`HGHUB_ALLOW_IPS`）时必须开，否则看到的都是 127.0.0.1 |
+| 混合内容 | 页面是 https，而**视频分片是 http 的 CDN** 会被浏览器拦；本项目 CDN 是 https，一般没问题 |
+| 端口 | 容器只绑 127.0.0.1 时，反代必须也在同一台机器的 127.0.0.1 上 |
+
+### 9.6 关于镜像标签 `1.2.0.8` 与 `nightly`
+
+`<用户名>/hghub:nightly` 是**标签**，`1.2.0.8` 是**应用版本号**，两者不是一回事：
+
+| 看哪里 | 值 | 含义 |
+| --- | --- | --- |
+| 镜像 tag | `nightly` / `nightly-6512156` | 每天覆盖 / 对应某次提交 |
+| `docker images` 的 TAG 列 | `nightly` | 这是标签，不是版本 |
+| 页面/`build.gradle` | `1.2.0.8` | 上游基线版本号，目前所有构建都基于它 |
+
+所以 `docker pull <用户名>/hghub:nightly` 是**能用的**（本仓库验证过：容器 `healthy`，
+页面与 `/api/play` 均 200）。想确认拿到的是不是最新，看 `nightly-<sha>` 标签
+和 GitHub Actions 的运行记录即可。
+
+> 补充：`nightly` 这个名字**不会**出现在镜像的 tag 列表之外——`docker images` 里
+> 显示的 `1.2.0.8` 可能是你本地早年 `docker build -t hghub:1.2.0.8` 留下的，
+> 和 Docker Hub 上的 `nightly` 是两个不同的镜像。

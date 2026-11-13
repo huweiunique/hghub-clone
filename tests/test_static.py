@@ -338,6 +338,40 @@ class DockerHubPublishTests(unittest.TestCase):
         self.assertIn("image:", block)
         self.assertIn("HGHUB_ACCESS_KEY", block)
 
+    def test_deployment_faq_section(self):
+        """只暴露前端、反代写法、镜像 tag 与版本号的区别都要写到。"""
+        doc = read("docs", "docker.md")
+        self.assertIn("## 九、只给 App 用", doc)
+        self.assertIn('"127.0.0.1:38081:8081"', doc)      # 回环绑定示例
+        self.assertIn("HGHUB_COOKIE_SECURE=1", doc)     # HTTPS 反代注意
+        self.assertIn("HGHUB_TRUST_PROXY=1", doc)
+        self.assertIn("proxy_pass http://127.0.0.1:38081", doc)
+        self.assertIn("location /", doc)                # 必须整站反代
+        # 默认 YAML 不应把 8080 暴露出去
+        block = doc.split("### 8.2", 1)[1].split("```yaml", 1)[1].split("```", 1)[0]
+        self.assertNotIn('"8080:8080"', block)
+
+
+class ReverseProxyTests(unittest.TestCase):
+    """前端必须同源调用后端，不能硬编码后端地址。"""
+
+    def test_frontend_uses_relative_api_paths(self):
+        html = read("web", "index.html")
+        self.assertNotRegex(html, r"fetch\(['\"]https?://")
+        self.assertIn("fetch('/api/play'", html)
+        self.assertIn("fetch('/api/prefip", html)
+
+    def test_backend_upstream_is_server_side_only(self):
+        """huangguoai 只在服务端反代里出现，前端不直连。"""
+        html = read("web", "index.html")
+        self.assertNotRegex(html, r"fetch\(\s*UP\b")
+        self.assertIn("huangguoai.com", read("web", "server.py"))
+
+    def test_proxy_base_is_container_local(self):
+        """8080 只在容器/本机内部用，默认 127.0.0.1。"""
+        server = read("web", "server.py")
+        self.assertIn('os.environ.get("PROXY_BASE", "http://127.0.0.1:8080")', server)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
