@@ -18,6 +18,10 @@ struct HGhubApp: App {
 final class AppSettings: ObservableObject {
     private let defaults = UserDefaults.standard
 
+    /// 构建时内置的值（只读，给设置面板展示）
+    let builtInURL: String
+    let builtInKey: String
+
     @Published var appURL: String {
         didSet { defaults.set(appURL, forKey: "app_url") }
     }
@@ -26,12 +30,20 @@ final class AppSettings: ObservableObject {
     }
 
     init() {
-        let builtInURL = AppSettings.bundleValue("AppURL")
-        let builtInKey = AppSettings.bundleValue("AccessKey")
+        let bURL = AppSettings.bundleValue("AppURL")
+        let bKey = AppSettings.bundleValue("AccessKey")
+        builtInURL = bURL
+        builtInKey = bKey
         let savedURL = defaults.string(forKey: "app_url") ?? ""
         let savedKey = defaults.string(forKey: "access_key") ?? ""
-        appURL = savedURL.isEmpty ? builtInURL : savedURL
-        accessKey = savedKey.isEmpty ? builtInKey : savedKey
+        appURL = savedURL.isEmpty ? bURL : savedURL
+        accessKey = savedKey.isEmpty ? bKey : savedKey
+    }
+
+    /// 恢复为构建时内置的地址与密钥
+    func restoreBuiltIn() {
+        appURL = builtInURL
+        accessKey = builtInKey
     }
 
     static func bundleValue(_ key: String) -> String {

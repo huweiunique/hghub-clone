@@ -1,5 +1,7 @@
 # 访问密钥（不提交真实 key）
 ios/HGhub/HGhub/AppConfig.plist
+.env
+.env.local
 
 # 构建产物
 dist/

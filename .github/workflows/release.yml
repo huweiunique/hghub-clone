@@ -26,6 +26,7 @@ permissions:
   contents: write
 
 env:
+  # workflow_dispatch 可填；打 tag 时也可用仓库变量/密钥兜底
   APP_URL: ${{ inputs.app_url }}
   ACCESS_KEY: ${{ inputs.access_key }}
 
@@ -48,7 +49,10 @@ jobs:
           yes | "$SDK/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
           "$SDK/cmdline-tools/latest/bin/sdkmanager" "platforms;android-34" "build-tools;34.0.0" >/dev/null
 
-      - name: 构建 APK
+      - name: 构建 APK（内置后端地址 + 访问密钥）
+        env:
+          APP_URL: ${{ inputs.app_url }}
+          APP_ACCESS_KEY: ${{ inputs.access_key }}
         run: |
           bash android/build-apk-manual.sh
           BT="$ANDROID_HOME/build-tools/34.0.0"

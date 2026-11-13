@@ -58,6 +58,8 @@ public class MainActivity extends Activity {
 
     private static final String PREFS = "hghub";
     private static final String KEY_URL = "app_url";
+    // 本地扩展：后端访问密钥（对应 HGHUB_ACCESS_KEY）
+    private static final String KEY_ACCESS = "access_key";
 
     private WebView webView;
     // 1.2.0.5 优选 IP：cf.090227.xyz 上别人测好的 CF 优选 IP。
@@ -104,14 +106,38 @@ public class MainActivity extends Activity {
         String fromPrefs = getSharedPreferences(PREFS, MODE_PRIVATE)
                 .getString(KEY_URL, null);
         if (fromPrefs != null && !fromPrefs.isEmpty()) {
-            return fromPrefs;
+            return withAccessKey(fromPrefs);
         }
         // 构建时填入的地址优先于空值
         String builtIn = BuildConfig.APP_URL;
-        return (builtIn == null || builtIn.isEmpty()) ? null : builtIn;
+        return (builtIn == null || builtIn.isEmpty()) ? null : withAccessKey(builtIn);
     }
 
-    /** 首次打开：输入复刻版网页地址一次，保存在本地。 */
+    /**
+     * 本地扩展：给地址追加访问密钥（?key=），后端据此下发 Cookie。
+     * 优先用用户在设置里填的，其次用构建时注入的 APP_ACCESS_KEY。
+     * 没有密钥时原样返回（后端没开鉴权的情况）。
+     */
+    private String withAccessKey(String url) {
+        String key = getSharedPreferences(PREFS, MODE_PRIVATE)
+                .getString(KEY_ACCESS, null);
+        if (key == null || key.isEmpty()) {
+            key = BuildConfig.APP_ACCESS_KEY;
+        }
+        if (key == null || key.isEmpty() || url == null || url.isEmpty()) {
+            return url;
+        }
+        try {
+            android.net.Uri.Builder b = android.net.Uri.parse(url).buildUpon();
+            b.removeQueryParameter("key");
+            b.appendQueryParameter("key", key);
+            return b.build().toString();
+        } catch (Exception e) {
+            return url;
+        }
+    }
+
+    /** 首次打开：输入复刻版网页地址 +（可选）访问密钥，保存在本地。 */
     private void showUrlSetup() {
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
@@ -136,27 +162,49 @@ public class MainActivity extends Activity {
         }
         root.addView(input);
 
+        // 本地扩展：访问密钥（后端设了 HGHUB_ACCESS_KEY 时需要）
+        TextView keyHint = new TextView(this);
+        keyHint.setText("访问密钥（后端开启了鉴权时填写，可留空）");
+        keyHint.setPadding(0, pad, 0, 0);
+        root.addView(keyHint);
+
+        EditText keyInput = new EditText(this);
+        keyInput.setHint("访问密钥");
+        keyInput.setSingleLine(true);
+        String savedKey = getSharedPreferences(PREFS, MODE_PRIVATE)
+                .getString(KEY_ACCESS, null);
+        if (savedKey != null && !savedKey.isEmpty()) {
+            keyInput.setText(savedKey);
+        } else if (BuildConfig.APP_ACCESS_KEY != null) {
+            keyInput.setText(BuildConfig.APP_ACCESS_KEY);
+        }
+        root.addView(keyInput);
+
         Button open = new Button(this);
         open.setText("打开");
         open.setOnClickListener(v -> {
             String url = input.getText().toString().trim();
+            String key = keyInput.getText().toString().trim();
             if (!url.isEmpty()) {
                 if (!url.startsWith("http://") && !url.startsWith("https://")) {
                     url = "https://" + url;
                 }
                 getSharedPreferences(PREFS, MODE_PRIVATE).edit()
-                        .putString(KEY_URL, url).apply();
-                showWebView(url);
+                        .putString(KEY_URL, url)
+                        .putString(KEY_ACCESS, key)
+                        .apply();
+                showWebView(withAccessKey(url));
             }
         });
         root.addView(open);
 
         Button clear = new Button(this);
-        clear.setText("清除已保存地址");
+        clear.setText("清除已保存地址与密钥");
         clear.setOnClickListener(v -> {
             getSharedPreferences(PREFS, MODE_PRIVATE).edit()
-                    .remove(KEY_URL).apply();
+                    .remove(KEY_URL).remove(KEY_ACCESS).apply();
             input.setText("");
+            keyInput.setText("");
         });
         root.addView(clear);
 

@@ -170,5 +170,57 @@ class LocalPatchTests(unittest.TestCase):
         self.assertEqual(access_key.pre_serve(None, "POST", path="/api/play")[0], 0)
 
 
+class ClientConfigTests(unittest.TestCase):
+    """客户端（APK / IPA）必须能配置「后端地址 + 访问密钥」，且 Docker 侧能通过环境变量注入密钥。"""
+
+    def test_android_has_url_and_key_config(self):
+        java = read("android", "app", "src", "main", "java", "com", "hghub", "huangguo", "MainActivity.java")
+        self.assertIn("BuildConfig.APP_URL", java)
+        self.assertIn("BuildConfig.APP_ACCESS_KEY", java)
+        self.assertIn("KEY_ACCESS", java)
+        # 设置界面里有地址和密钥两个输入框
+        self.assertIn("EditText input", java)
+        self.assertIn("EditText keyInput", java)
+        # 地址要带上 key 参数（?key=）才会换 Cookie
+        self.assertIn("appendQueryParameter(\"key\"", java)
+
+    def test_android_build_injects_access_key(self):
+        sh = read("android", "build-apk-manual.sh")
+        self.assertIn("APP_ACCESS_KEY", sh)
+        self.assertIn("public static final String APP_ACCESS_KEY", sh)
+        gradle = read("android", "app", "build.gradle")
+        self.assertIn("APP_ACCESS_KEY", gradle)
+        self.assertIn("appAccessKey", gradle)
+
+    def test_ios_has_url_and_key_config(self):
+        app = read("ios", "HGhub", "HGhub", "App.swift")
+        view = read("ios", "HGhub", "HGhub", "WebView.swift")
+        self.assertIn("AccessKey", app)              # 读 AppConfig.plist
+        self.assertIn("URLQueryItem(name: \"key\"", app)
+        self.assertIn("SecureField", view)           # 密钥输入框
+        self.assertIn("TextField(\"http://", view)   # 地址输入框
+        self.assertIn("测试连接", view)
+        script = read("ios", "build-ipa.sh")
+        self.assertIn("AccessKey", script)
+
+    def test_docker_passes_access_key_env(self):
+        compose = read("docker-compose.yml")
+        self.assertIn("HGHUB_ACCESS_KEY", compose)
+        self.assertIn("HGHUB_ALLOW_IPS", compose)
+        entry = read("docker", "entrypoint.sh")
+        self.assertIn("HGHUB_ACCESS_KEY", entry)
+
+    def test_dotenv_not_committed(self):
+        ignore = read(".gitignore")
+        self.assertIn(".env", ignore.splitlines())
+        # 模板要能提交
+        self.assertTrue(os.path.exists(os.path.join(REPO_ROOT, ".env.example")))
+
+    def test_ci_injects_key_into_both_clients(self):
+        wf = read(".github", "workflows", "release.yml")
+        self.assertIn("APP_ACCESS_KEY", wf)   # APK
+        self.assertIn("ACCESS_KEY", wf)       # IPA
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
