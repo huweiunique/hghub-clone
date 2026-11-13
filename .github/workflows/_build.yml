@@ -304,3 +304,60 @@ jobs:
           echo "${{ steps.meta.outputs.tags }}" >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
           docker buildx imagetools inspect ${{ steps.meta.outputs.repo }}:$( [ "${{ inputs.channel }}" = "stable" ] && echo latest || echo nightly )
+
+      # Nightly 每天产生一个 nightly-<sha>，不清理会一直堆积、吃满 Docker Hub 配额。
+      # 这里只保留最近 5 个带 sha 的标签，更早的删除（nightly / latest / 版本号标签不动）。
+      # 删除 tag 需要 delete 权限；token 没有该权限时脚本会跳过并给个 notice，不影响构建。
+      - name: 清理旧的 nightly-<sha> 标签（保留最近 5 个）
+        if: steps.gate.outputs.enabled == 'true' && inputs.channel == 'nightly'
+        continue-on-error: true
+        env:
+          REPO: ${{ steps.meta.outputs.repo }}
+          U: ${{ secrets.DOCKERHUB_USERNAME }}
+          T: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: |
+          python3 - "$REPO" "$U" "$T" <<'PY'
+          import base64, json, os, sys, urllib.request, urllib.error
+
+          repo, user, token = sys.argv[1], sys.argv[2], sys.argv[3]
+          basic = base64.b64encode(f"{user}:{token}".encode()).decode()
+          tok = json.load(urllib.request.urlopen(urllib.request.Request(
+              f"https://auth.docker.io/token?service=registry.docker.io"
+              f"&scope=repository:{repo}:pull,push,delete",
+              headers={"Authorization": f"Basic {basic}"}), timeout=30))["token"]
+          H = {"Authorization": f"Bearer {tok}"}
+
+          def tags():
+              r = urllib.request.urlopen(urllib.request.Request(
+                  f"https://registry-1.docker.io/v2/{repo}/tags/list", headers=H), timeout=30)
+              return json.load(r).get("tags") or []
+
+          def digest(tag):
+              req = urllib.request.Request(
+                  f"https://registry-1.docker.io/v2/{repo}/manifests/{tag}", headers={
+                      **H, "Accept": "application/vnd.oci.image.index.v1+json,"
+                                     "application/vnd.docker.distribution.manifest.list.v2+json,"
+                                     "application/vnd.oci.image.manifest.v1+json,"
+                                     "application/vnd.docker.distribution.manifest.v2+json"})
+              req.get_method = lambda: "HEAD"
+              return urllib.request.urlopen(req, timeout=30).headers["Docker-Content-Digest"]
+
+          all_tags = tags()
+          shas = [t for t in all_tags if t.startswith("nightly-")]
+          if len(shas) <= 5:
+              print("nightly-<sha> 标签数", len(shas), "无需清理")
+              sys.exit(0)
+          for t in shas[: len(shas) - 5]:
+              try:
+                  d = digest(t)
+                  req = urllib.request.Request(
+                      f"https://registry-1.docker.io/v2/{repo}/manifests/{d}",
+                      headers=H)
+                  req.get_method = lambda: "DELETE"
+                  urllib.request.urlopen(req, timeout=30)
+                  print("已删除", t)
+              except urllib.error.HTTPError as e:
+                  print(f"::notice::删除 {t} 被拒绝（HTTP {e.code}）：token 可能没有 delete 权限，跳过")
+                  break
+          print("剩余：", ", ".join(tags()))
+          PY
