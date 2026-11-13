@@ -80,11 +80,22 @@ fi
   exit 1
 }
 echo "[ios] app 路径：$APP_PATH"
+ls -la "$APP_PATH" || true
 file "$APP_PATH/HGhub" || true
 
 # AppConfig.plist 必须在 Bundle 里，AppSettings 才能读到
 cp "$PROJ_DIR/HGhub/AppConfig.plist" "$APP_PATH/AppConfig.plist"
 plutil -p "$APP_PATH/AppConfig.plist"
+
+# 完整性断言：资源目录编译产物必须存在（AppIcon 缺图片时 actool 不会生成 Assets.car，
+# 装到手机上就是白图标；本仓库踩过）。缺了就 fail，别产出半个包。
+if [ ! -f "$APP_PATH/Assets.car" ]; then
+  echo "[ios] 缺少 Assets.car（Assets.xcassets 未编译）：" >&2
+  ls -la "$APP_PATH" >&2
+  echo "[ios] 检查 AppIcon.appiconset/Contents.json 是否引用真实 png" >&2
+  exit 1
+fi
+echo "[ios] 资源包：" "$(du -sh "$APP_PATH/Assets.car" | cut -f1)" "Assets.car"
 
 # ---------------------------------------------------------------------------
 # 组装未签名 IPA：
