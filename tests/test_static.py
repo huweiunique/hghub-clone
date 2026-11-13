@@ -181,8 +181,12 @@ class ClientConfigTests(unittest.TestCase):
         # 设置界面里有地址和密钥两个输入框
         self.assertIn("EditText input", java)
         self.assertIn("EditText keyInput", java)
-        # 地址要带上 key 参数（?key=）才会换 Cookie
-        self.assertIn("appendQueryParameter(\"key\"", java)
+        # 地址要带上 key 参数（?key=）才会换 Cookie；实现用字符串拼接以兼容 minSdk 24
+        self.assertIn('sb.append("key=")', java)
+        self.assertIn("android.net.Uri.encode(key)", java)
+        # 不能用到 API 29+ 的 Uri.Builder 方法
+        self.assertNotIn("removeQueryParameter", java)
+        self.assertNotIn("appendEncodedQueryParameter", java)
 
     def test_android_build_injects_access_key(self):
         sh = read("android", "build-apk-manual.sh")
