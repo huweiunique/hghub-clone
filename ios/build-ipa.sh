@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # 在 macOS 上构建未签名 .ipa（GitHub Actions 的 macos runner 里跑）。
 #
-#   APP_URL="http://1.2.3.4:8081/" ACCESS_KEY="xxxx" bash ios/build-ipa.sh
+#   APP_URL="http://1.2.3.4:8081/" bash ios/build-ipa.sh
+#   访问密钥【不参与构建】：用户在 App 首次打开时输入并保存，避免分发包带密钥。
 #   # 产物：dist/HGhub-<version>-unsigned.ipa
 #
 # 未签名 IPA 不能直接装到真机，需要自己重签（Sideloadly / AltStore / 开发者证书）：
@@ -13,12 +14,12 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 PROJ_DIR="$ROOT/ios/HGhub"
 SCHEME="HGhub"
 APP_URL="${APP_URL:-}"
-ACCESS_KEY="${ACCESS_KEY:-}"
+ACCESS_KEY=""
 VERSION="$(/usr/libexec/PlistBuddy -c 'Print :MARKETING_VERSION' "$PROJ_DIR/HGhub.xcodeproj/project.pbxproj" 2>/dev/null | head -1 || true)"
 [ -z "$VERSION" ] && VERSION="1.2.0.8"
 
 echo "[ios] APP_URL=${APP_URL:-<空，首次打开在 App 内填写>}"
-echo "[ios] ACCESS_KEY=$([ -n "$ACCESS_KEY" ] && echo '<已设置>' || echo '<空>')"
+echo "[ios] 访问密钥：不内置，首次打开时在 App 内输入"
 
 # 生成 AppConfig.plist 打进 bundle（不写进源码，避免密钥进仓库）
 mkdir -p "$PROJ_DIR/HGhub"

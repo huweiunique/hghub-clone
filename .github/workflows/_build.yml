@@ -1,0 +1,191 @@
+name: _build
+
+# 供 nightly.yml / release.yml 复用的构建流程。
+# 产出：APK + 未签名 IPA，并附上「本次包含哪些提交、改了什么」。
+#
+# 输入：
+#   channel  nightly | stable
+#   app_url  构建时内置的后端地址（留空则首次打开手填）
+#
+# 访问密钥【不参与构建】：用户在 App 首次打开时输入并保存在本机。
+# 结构：notes（算说明）→ apk / ipa（并行构建）→ publish（合并产物到同一个 Release）
+
+on:
+  workflow_call:
+    inputs:
+      channel:
+        type: string
+        required: true
+      app_url:
+        type: string
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+jobs:
+  notes:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      title: ${{ steps.v.outputs.title }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0          # 需要历史来生成提交清单
+
+      - name: 计算版本标识
+        id: v
+        run: |
+          if [ "${{ inputs.channel }}" = "stable" ]; then
+            echo "version=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+            echo "title=HGhub ${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=nightly" >> "$GITHUB_OUTPUT"
+            echo "title=HGhub Nightly · $(date -u +%Y-%m-%d) · ${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: 生成发布说明（包含提交与改动）
+        run: |
+          OUT=notes.md
+          {
+            echo "## ${{ steps.v.outputs.title }}"
+            echo ""
+            if [ "${{ inputs.channel }}" = "stable" ]; then
+              echo "> 正式版本，由维护者打 tag 发布。"
+            else
+              echo "> **Nightly 预发布**：自动构建的最新版本，可能不稳定。"
+              echo "> 正式版本只由维护者打 \`vX.Y.Z\` tag 发布；这里每次覆盖更新。"
+            fi
+            echo ""
+            echo "| 项目 | 值 |"
+            echo "| --- | --- |"
+            echo "| 提交 | \`${GITHUB_SHA}\` |"
+            echo "| 来源 | \`${GITHUB_REF_NAME}\` |"
+            echo "| 构建时间 | $(date -u '+%Y-%m-%d %H:%M UTC') |"
+            echo "| 运行 | [#${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) |"
+            echo "| 内置后端地址 | \`${{ inputs.app_url || '无（首次打开手填）' }}\` |"
+            echo "| 访问密钥 | 不内置，首次打开在 App 内输入并保存 |"
+            echo ""
+            echo "### 下载"
+            echo ""
+            echo "- \`HGhub-*.apk\`：Android 7.0+，debug 签名，可直接安装"
+            echo "- \`HGhub-*-unsigned.ipa\`：iOS 16+，**未签名**，需 Sideloadly/AltStore 重签后安装"
+            echo ""
+            echo "### 本次包含的提交"
+            echo ""
+            if [ "${{ inputs.channel }}" = "stable" ]; then
+              PREV=$(git describe --tags --abbrev=0 "${{ github.sha }}^" 2>/dev/null || echo "")
+              RANGE="${PREV:+$PREV..}${{ github.sha }}"
+              if [ -n "$PREV" ]; then echo "自 \`$PREV\` 以来："; else echo "首个正式版本。最近提交："; fi
+            else
+              RANGE="-25"
+              echo "最近 25 条提交："
+            fi
+            echo ""
+            git log --pretty=format:'- %h %s （%an，%ad）' --date=short $RANGE | head -40
+            echo ""
+            echo ""
+            echo "### 改动的文件"
+            echo ""
+            echo '```'
+            if [ "${{ inputs.channel }}" = "stable" ]; then
+              git diff --stat "$RANGE" 2>/dev/null | tail -30 || true
+            else
+              git diff --stat HEAD~1 2>/dev/null | tail -20 || true
+            fi
+            echo '```'
+          } > "$OUT"
+          echo "--- 发布说明预览 ---"
+          cat "$OUT"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-notes
+          path: notes.md
+
+  apk:
+    needs: notes
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: 安装 Android SDK 组件
+        run: |
+          SDK="$ANDROID_HOME"
+          yes | "$SDK/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$SDK/cmdline-tools/latest/bin/sdkmanager" "platforms;android-34" "build-tools;34.0.0" >/dev/null
+
+      - name: 构建 APK
+        env:
+          APP_URL: ${{ inputs.app_url }}
+        run: |
+          bash android/build-apk-manual.sh
+          BT="$ANDROID_HOME/build-tools/34.0.0"
+          APK=$(ls android/HGhub-*.apk)
+          "$BT/aapt2" dump badging "$APK" | grep -E "package:|sdkVersion|targetSdkVersion"
+          "$BT/apksigner" verify --verbose "$APK"
+          # 访问密钥不应内置：源码里 APP_ACCESS_KEY 必须为空字符串常量
+          grep -q 'APP_ACCESS_KEY = ""' android/build-apk-manual.sh \
+            || { echo "::error::build-apk-manual.sh 里 APP_ACCESS_KEY 必须为空"; exit 1; }
+          mkdir -p dist && cp "$APK" dist/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: apk
+          path: dist/HGhub-*.apk
+
+  ipa:
+    needs: notes
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Xcode 版本
+        run: xcodebuild -version
+
+      - name: 构建未签名 IPA
+        env:
+          APP_URL: ${{ inputs.app_url }}
+        run: bash ios/build-ipa.sh
+
+      - name: 检查 IPA 结构（并确认没有内置密钥）
+        run: |
+          unzip -l dist/HGhub-*.ipa | head -15
+          CFG=$(unzip -p dist/HGhub-*.ipa "Payload/HGhub.app/AppConfig.plist")
+          echo "$CFG" | plutil -p -
+          echo "$CFG" | grep -A1 '<key>AccessKey</key>' | grep -q '<string></string>' \
+            || { echo "::error::AppConfig.plist 里 AccessKey 不为空"; exit 1; }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ipa-unsigned
+          path: dist/HGhub-*.ipa
+
+  publish:
+    needs: [notes, apk, ipa]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: 发布到 GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.notes.outputs.version }}
+          name: ${{ needs.notes.outputs.title }}
+          body_path: dist/notes.md
+          prerelease: ${{ inputs.channel == 'nightly' }}
+          fail_on_unmatched_files: true
+          files: |
+            dist/HGhub-*.apk
+            dist/HGhub-*.ipa

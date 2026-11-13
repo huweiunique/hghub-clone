@@ -1,0 +1,26 @@
+name: Nightly
+
+# 默认发布通道。
+#
+#   - 每天定时（也可手动触发）构建 APK + IPA，发布为 "nightly" 预发布，
+#     同一个 tag 每次覆盖更新，不占用正式版本号。
+#   - 只有维护者手动打 vX.Y.Z tag 时，才由 release.yml 发正式版本。
+
+on:
+  schedule:
+    - cron: "0 18 * * *"        # 每天 UTC 18:00（北京时间 02:00）
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: nightly
+  cancel-in-progress: true
+
+jobs:
+  build:
+    uses: ./.github/workflows/_build.yml
+    with:
+      channel: nightly
+      app_url: ${{ vars.HGHUB_APP_URL || '' }}

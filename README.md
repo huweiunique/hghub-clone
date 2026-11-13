@@ -4,6 +4,9 @@
 > 所有内容均来自第三方站点，请自行判断合规性，并在 24 小时内删除相关资源。
 > 本项目与黄果短剧官方无关；原作者已删库停更。
 
+> 📦 **本 fork 的 Docker 部署 / 发布说明见 [docs/docker.md](docs/docker.md)**
+> （镜像怎么编译、`docker run`、`docker compose`、访问密钥、Nightly 与正式版规则）。
+
 这是 [HGhub](https://github.com/Minireel/HGhub) 1.2.0（黄果短剧第三方客户端，
 Tauri 2 + React，Fluent 设计）的**网页复刻版**：原作者删库后，按留存的
 1.2.0 APK（包名 `com.hghub.huangguo`）复刻而成。

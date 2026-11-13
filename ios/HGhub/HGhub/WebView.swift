@@ -62,7 +62,7 @@ struct SetupView: View {
                         .keyboardType(.URL)
                 }
                 Section {
-                    SecureField("访问密钥（可选）", text: $settings.accessKey)
+                    SecureField("访问密钥（后端开启鉴权时必填）", text: $settings.accessKey)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                     HStack {
@@ -78,18 +78,16 @@ struct SetupView: View {
                 } header: {
                     Text("访问密钥")
                 } footer: {
-                    Text("后端设了 HGHUB_ACCESS_KEY 时填写。连接成功会自动换 Cookie，之后不用再输入。")
+                    Text("密钥只保存在本机，不会随安装包分发。可以填任意字符串（字母/数字/符号），长度越长越安全。"
+                         + "连接成功会自动换 Cookie，之后不用再输入。")
                 }
                 Section("构建时内置（只读）") {
                     LabeledContent("地址") {
                         Text(settings.builtInURL.isEmpty ? "—" : settings.builtInURL)
                             .lineLimit(1).truncationMode(.middle)
                     }
-                    LabeledContent("密钥") {
-                        Text(settings.builtInKey.isEmpty ? "—" : "已内置")
-                    }
-                    if !settings.builtInURL.isEmpty || !settings.builtInKey.isEmpty {
-                        Button("恢复内置配置") { settings.restoreBuiltIn() }
+                    if !settings.builtInURL.isEmpty {
+                        Button("恢复内置地址") { settings.restoreBuiltIn() }
                     }
                 }
             }

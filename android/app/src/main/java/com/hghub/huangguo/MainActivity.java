@@ -114,16 +114,14 @@ public class MainActivity extends Activity {
     }
 
     /**
-     * 本地扩展：给地址追加访问密钥（?key=），后端据此下发 Cookie。
-     * 优先用用户在设置里填的，其次用构建时注入的 APP_ACCESS_KEY。
-     * 没有密钥时原样返回（后端没开鉴权的情况）。
+     * 给地址追加访问密钥（?key=），后端据此下发 Cookie。
+     * 密钥只来自用户在应用内输入的值（保存在本机），构建产物里不内置任何密钥。
+     * 没有密钥时原样返回 —— 后端未开鉴权时无需密钥；开了鉴权时网页会弹输入框，
+     * 也可以点网页里「我的 → 设置」或长按返回键重新填写。
      */
     private String withAccessKey(String url) {
         String key = getSharedPreferences(PREFS, MODE_PRIVATE)
                 .getString(KEY_ACCESS, null);
-        if (key == null || key.isEmpty()) {
-            key = BuildConfig.APP_ACCESS_KEY;
-        }
         if (key == null || key.isEmpty() || url == null || url.isEmpty()) {
             return url;
         }
@@ -551,6 +549,35 @@ public class MainActivity extends Activity {
         } catch (Exception e) {
             webView.loadUrl(baseUrl);
         }
+    }
+
+    /** 长按返回键（1 秒）打开设置页，方便随时补填/修改访问密钥。 */
+    private long backPressStart = 0;
+    private boolean settingsOpenedByLongPress = false;
+
+    @Override
+    public boolean onKeyDown(int keyCode, android.view.KeyEvent event) {
+        if (keyCode == android.view.KeyEvent.KEYCODE_BACK) {
+            if (backPressStart == 0) backPressStart = System.currentTimeMillis();
+            if (!settingsOpenedByLongPress && System.currentTimeMillis() - backPressStart > 900) {
+                settingsOpenedByLongPress = true;
+                showUrlSetup();
+                return true;
+            }
+        }
+        return super.onKeyDown(keyCode, event);
+    }
+
+    @Override
+    public boolean onKeyUp(int keyCode, android.view.KeyEvent event) {
+        if (keyCode == android.view.KeyEvent.KEYCODE_BACK) {
+            backPressStart = 0;
+            if (settingsOpenedByLongPress) {
+                settingsOpenedByLongPress = false;
+                return true;
+            }
+        }
+        return super.onKeyUp(keyCode, event);
     }
 
     @Override

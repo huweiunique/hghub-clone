@@ -18,9 +18,8 @@ android {
         // Muse 托管的 fullstack artifact 没有公开链接，填入部署后的地址再构建。
         buildConfigField("String", "APP_URL", "\"${project.findProperty("appUrl") ?: ""}\"")
         buildConfigField("String", "FALLBACK_URL", "\"${project.findProperty("fallbackUrl") ?: ""}\"")
-        // 本地扩展：后端访问密钥（对应服务端 HGHUB_ACCESS_KEY）
-        //   ./gradlew assembleDebug -PappAccessKey=<KEY>
-        buildConfigField("String", "APP_ACCESS_KEY", "\"${project.findProperty("appAccessKey") ?: ""}\"")
+        // 访问密钥不内置（避免把密钥打进分发包），运行时由用户输入并保存在本地。
+        buildConfigField("String", "APP_ACCESS_KEY", "\"\"")
     }
 
     buildTypes {

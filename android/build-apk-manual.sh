@@ -25,14 +25,10 @@ APP_URL="${APP_URL:-}"
 # FALLBACK_URL：hg 域名打不开（隧道未跑起来报 530）时回退的直连地址，构建时注入。
 #   FALLBACK_URL="http://YOUR_SERVER_IP:8081/" bash android/build-apk-manual.sh
 FALLBACK_URL="${FALLBACK_URL:-}"
-# APP_ACCESS_KEY：后端访问密钥（对应服务端环境变量 HGHUB_ACCESS_KEY），构建时注入；
-# 为空则首次打开时在应用内输入一次，也可随时在「设置」里改。
-#   APP_ACCESS_KEY="$(openssl rand -hex 32)" bash android/build-apk-manual.sh
-APP_ACCESS_KEY="${APP_ACCESS_KEY:-}"
+# 访问密钥【故意不参与构建】：避免把密钥打进分发包。用户首次打开时自己输入并保存。
 # 转义成 Java 字符串字面量（防引号/反斜杠破坏代码）
 APP_URL_JAVA=$(python3 -c 'import json,sys; print(json.dumps(sys.argv[1])[1:-1])' "$APP_URL")
 FALLBACK_URL_JAVA=$(python3 -c 'import json,sys; print(json.dumps(sys.argv[1])[1:-1])' "$FALLBACK_URL")
-APP_ACCESS_KEY_JAVA=$(python3 -c 'import json,sys; print(json.dumps(sys.argv[1])[1:-1])' "$APP_ACCESS_KEY")
 
 mkdir -p "$W/gen/com/hghub/huangguo"
 cat > "$W/gen/com/hghub/huangguo/BuildConfig.java" <<EOF
@@ -47,8 +43,8 @@ public final class BuildConfig {
     public static final String APP_URL = "$APP_URL_JAVA";
     // hg 域名打不开时回退的直连地址，同样构建时注入，仓库里不写服务器 IP。
     public static final String FALLBACK_URL = "$FALLBACK_URL_JAVA";
-    // 后端访问密钥（HGHUB_ACCESS_KEY）；为空则首次打开时输入，或留空表示后端未开鉴权。
-    public static final String APP_ACCESS_KEY = "$APP_ACCESS_KEY_JAVA";
+    // 访问密钥不内置：为空常量，运行时由用户在应用内输入并保存在本地。
+    public static final String APP_ACCESS_KEY = "";
 }
 EOF
 

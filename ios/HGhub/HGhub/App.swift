@@ -13,14 +13,15 @@ struct HGhubApp: App {
     }
 }
 
-/// 后端地址 + 访问密钥。构建时由 build-ipa.sh 写进 AppConfig.plist；
-/// 用户也可以在 App 里改（存 UserDefaults，优先级高于内置值）。
+/// 后端地址 + 访问密钥。
+/// 地址可以由构建时注入（AppConfig.plist 的 AppURL）；**密钥一律不内置**，
+/// 首次打开由用户输入并保存在本机（UserDefaults），避免分发包里带密钥。
 final class AppSettings: ObservableObject {
     private let defaults = UserDefaults.standard
 
-    /// 构建时内置的值（只读，给设置面板展示）
+    /// 构建时内置的地址（只读，给设置面板展示）；密钥永远为空
     let builtInURL: String
-    let builtInKey: String
+    let builtInKey = ""
 
     @Published var appURL: String {
         didSet { defaults.set(appURL, forKey: "app_url") }
@@ -31,19 +32,16 @@ final class AppSettings: ObservableObject {
 
     init() {
         let bURL = AppSettings.bundleValue("AppURL")
-        let bKey = AppSettings.bundleValue("AccessKey")
         builtInURL = bURL
-        builtInKey = bKey
         let savedURL = defaults.string(forKey: "app_url") ?? ""
         let savedKey = defaults.string(forKey: "access_key") ?? ""
         appURL = savedURL.isEmpty ? bURL : savedURL
-        accessKey = savedKey.isEmpty ? bKey : savedKey
+        accessKey = savedKey
     }
 
-    /// 恢复为构建时内置的地址与密钥
+    /// 恢复为构建时内置的地址（密钥保持用户输入的值）
     func restoreBuiltIn() {
         appURL = builtInURL
-        accessKey = builtInKey
     }
 
     static func bundleValue(_ key: String) -> String {

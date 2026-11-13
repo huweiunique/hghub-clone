@@ -189,24 +189,36 @@ class ClientConfigTests(unittest.TestCase):
         self.assertNotIn("removeQueryParameter", code)
         self.assertNotIn("appendEncodedQueryParameter", code)
 
-    def test_android_build_injects_access_key(self):
+    def test_android_build_does_not_embed_access_key(self):
+        """密钥不允许内置进安装包，只能在 App 内输入。"""
         sh = read("android", "build-apk-manual.sh")
-        self.assertIn("APP_ACCESS_KEY", sh)
-        self.assertIn("public static final String APP_ACCESS_KEY", sh)
+        self.assertIn('public static final String APP_ACCESS_KEY = "";', sh)
+        self.assertNotIn("APP_ACCESS_KEY_JAVA", sh)
         gradle = read("android", "app", "build.gradle")
-        self.assertIn("APP_ACCESS_KEY", gradle)
-        self.assertIn("appAccessKey", gradle)
+        self.assertIn('buildConfigField("String", "APP_ACCESS_KEY", "\\"\\"")', gradle)
+        self.assertNotIn("appAccessKey", gradle)
+
+    def test_ios_does_not_embed_access_key(self):
+        app = read("ios", "HGhub", "HGhub", "App.swift")
+        self.assertIn('let builtInKey = ""', app)
+        self.assertNotIn('bundleValue("AccessKey")', app)
+        script = read("ios", "build-ipa.sh")
+        self.assertIn('ACCESS_KEY=""', script)
 
     def test_ios_has_url_and_key_config(self):
         app = read("ios", "HGhub", "HGhub", "App.swift")
         view = read("ios", "HGhub", "HGhub", "WebView.swift")
-        self.assertIn("AccessKey", app)              # 读 AppConfig.plist
         self.assertIn("URLQueryItem(name: \"key\"", app)
         self.assertIn("SecureField", view)           # 密钥输入框
         self.assertIn("TextField(\"http://", view)   # 地址输入框
         self.assertIn("测试连接", view)
-        script = read("ios", "build-ipa.sh")
-        self.assertIn("AccessKey", script)
+
+    def test_android_can_reopen_settings(self):
+        """首次没填密钥也要能补填：长按返回键回到设置页。"""
+        java = read("android", "app", "src", "main", "java", "com", "hghub", "huangguo", "MainActivity.java")
+        self.assertIn("onKeyDown", java)
+        self.assertIn("showUrlSetup()", java)
+        self.assertIn("KEYCODE_BACK", java)
 
     def test_docker_passes_access_key_env(self):
         compose = read("docker-compose.yml")
@@ -218,13 +230,48 @@ class ClientConfigTests(unittest.TestCase):
     def test_dotenv_not_committed(self):
         ignore = read(".gitignore")
         self.assertIn(".env", ignore.splitlines())
-        # 模板要能提交
         self.assertTrue(os.path.exists(os.path.join(REPO_ROOT, ".env.example")))
 
-    def test_ci_injects_key_into_both_clients(self):
-        wf = read(".github", "workflows", "release.yml")
-        self.assertIn("APP_ACCESS_KEY", wf)   # APK
-        self.assertIn("ACCESS_KEY", wf)       # IPA
+    def test_key_can_be_any_string(self):
+        """文档要讲清楚：密钥就是任意字符串，openssl 只是一种生成方式。"""
+        env = read(".env.example")
+        self.assertIn("任意字符串", env)
+        self.assertIn("openssl rand -hex 32", env)
+
+    def test_docker_docs_cover_build_run_compose(self):
+        doc = read("docs", "docker.md")
+        self.assertIn("docker build", doc)
+        self.assertIn("docker run", doc)
+        self.assertIn("docker compose up", doc)
+        self.assertIn("README", read("README.md"))
+
+
+class ReleaseChannelTests(unittest.TestCase):
+    """发布规则：默认 Nightly，正式版只能由人打 tag。"""
+
+    def test_nightly_is_default_channel(self):
+        night = read(".github", "workflows", "nightly.yml")
+        self.assertIn("schedule", night)
+        self.assertIn("channel: nightly", night)
+
+    def test_stable_release_only_on_tag(self):
+        rel = read(".github", "workflows", "release.yml")
+        self.assertIn('tags: ["v*"]', rel)
+        self.assertIn("channel: stable", rel)
+        # 正式版不能由 push/手动触发
+        self.assertNotIn("workflow_dispatch", rel)
+
+    def test_release_notes_include_commits(self):
+        build = read(".github", "workflows", "_build.yml")
+        self.assertIn("本次包含的提交", build)
+        self.assertIn("git log --pretty=format", build)
+        self.assertIn("git diff --stat", build)
+        self.assertIn("prerelease:", build)
+
+    def test_builds_reject_embedded_key(self):
+        build = read(".github", "workflows", "_build.yml")
+        self.assertIn('APP_ACCESS_KEY = ""', build)
+        self.assertIn("AccessKey", build)
 
 
 if __name__ == "__main__":

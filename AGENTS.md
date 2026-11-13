@@ -44,19 +44,26 @@ docker build --build-arg APT_MIRROR=deb.debian.org -t hghub:1.2.0.8 .   # 官方
 | 上游偶发 403/断连 | 清单签名过期或 CDN 轮换，测试会 skip 并注明，不要当成代码回归 |
 | `id=12/ep=1` 是固定样本 | README 一直用它，测试默认也用它（可 `HGHUB_SAMPLE_ID` 覆盖） |
 | 仓库里不写死服务器 IP | APK/IPA 地址靠构建时注入（`APP_URL`/`appUrl`） |
+| **客户端不内置访问密钥** | 必须用户在 App 内输入并保存；CI 会校验包里没有密钥 |
 
 ## 访问密钥（可选，默认关闭）
 
-`HGHUB_ACCESS_KEY` 非空才启用；`HGHUB_ALLOW_IPS` 可加 IP 白名单。
-首页/`hls.min.js`/`local_ext/*`/`health` 免鉴权，其余接口凭 `?key=` 或登录后的 HttpOnly Cookie。
-设计理由和踩过的坑见 [docs/access-key.md](docs/access-key.md)。
+服务端：`HGHUB_ACCESS_KEY` 非空才启用（**任意字符串**，`openssl rand` 只是一种生成方式），
+`HGHUB_ALLOW_IPS` 可加 IP 白名单。首页/`hls.min.js`/`local_ext/*`/`health` 免鉴权，
+其余接口凭 `?key=` 或登录后的 HttpOnly Cookie。
+客户端：APK 设置页 / IPA 齿轮面板里输入，保存在本机，**绝不内置进安装包**。
+详见 [docs/access-key.md](docs/access-key.md)。
 
-## 发布
+## 发布规则（重要）
 
-- **后端**：Docker 镜像（`hghub:<version>`），见 [docs/deploy.md](docs/deploy.md)。
-- **Release 工作流**（`.github/workflows/release.yml`）：一个 run 出 APK（ubuntu）+ 未签名 IPA（macOS），都进同一个 Release。
-- 打 tag（`v1.2.0.8`）即触发，也可以手动 `workflow_dispatch`。
-- 详细流程与已知限制：[docs/release.md](docs/release.md)。
+| 通道 | 触发 | 说明 |
+| --- | --- | --- |
+| **Nightly** | 每天 UTC 18:00 定时 / 手动 | 默认通道。tag 固定为 `nightly`，每次覆盖，Release 标 Pre-release |
+| **正式版** | **只有人手动打 `vX.Y.Z` tag** | 不要自己决定版本号；没人说发版就是 Nightly |
+
+- 共用流程在 `.github/workflows/_build.yml`；`nightly.yml` 与 `release.yml` 只是入口。
+- 每次发布必须带「本次包含的提交」和「改动文件统计」，由 `_build.yml` 的 notes job 自动生成。
+- 本地 Docker 构建与运行见 [docs/docker.md](docs/docker.md)；发版细节见 [docs/release.md](docs/release.md)。
 
 ## 提交前自检
 
@@ -67,6 +74,7 @@ python tests/run_all.py                       # 离线用例全绿
 
 ## 文档索引
 
+- [docs/docker.md](docs/docker.md) — Docker 编译 / run / compose / 密钥 / 版本规则（README 顶部有入口）
 - [docs/local-changes.md](docs/local-changes.md) — 本地扩展、补丁机制、冲突处理
 - [docs/access-key.md](docs/access-key.md) — 鉴权设计、Cookie 流、安全边界
 - [docs/deploy.md](docs/deploy.md) — Docker 构建/运行/排错
