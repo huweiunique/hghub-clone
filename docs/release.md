@@ -49,19 +49,15 @@ gh workflow run ios-ipa.yml -f app_url="http://<IP>:8081/" -f access_key="<KEY>"
 
 工作流目前只产出**未签名包**（无需任何 Apple 账号），签名环节留给你按需接入。
 
-## macOS runner 排队的实际情况（重要）
+## macOS runner 与打包方式（实测）
 
-本仓库实测（2026-11-12）：
-
-- `macos-14`：**已于 2026-11-02 退役**，用它会瞬间被 cancel。
-- `macos-15` / `macos-latest`：有时 45 秒内拿到 runner，有时排队 15 分钟后
-  被取消（`duration_ms: 0`、`runner_name: null`、无日志）。这是 GitHub 侧
-  macOS 容量/账号资格问题，不是工作流写错。
-- 拿到 runner 时，Swift 编译与 `xcodebuild archive` 均通过；第一版只因
-  `NavigationStack` 需要 iOS 16（已把部署目标改为 16）。
-
-**建议**：macOS 队列空闲时重跑 `Release` 工作流即可，IPA 会自动进同一个 Release。
-也可以用自己的 Mac 跑 `bash ios/build-ipa.sh`（本地构建完全一样）。
+- `macos-14` 已于 2026-11-02 退役，用它会瞬间被 cancel。
+- `macos-latest` / `macos-15` 有时能秒级分配，有时排队 15 分钟后取消
+  （`duration_ms: 0`、无日志）。这是 GitHub 侧容量问题，重跑 `Release` 即可。
+- **打包方式**：iOS 26.5 SDK 不允许 ad-hoc 签名，且 `CODE_SIGNING_ALLOWED=NO`
+  时 `xcodebuild archive` 不出 archive。所以脚本用 `xcodebuild build` 产出无签名
+  `.app`，再自己组装 `Payload/` 打成 IPA（Sideloadly/AltStore 负责重签）。
+- 脚本会断言 `Assets.car` 存在，图标缺失时直接失败，不会推出白图标的包。
 
 可用标签见 [actions/runner-images](https://github.com/actions/runner-images#available-images)。
 
