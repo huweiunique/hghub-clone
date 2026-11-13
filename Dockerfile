@@ -13,7 +13,7 @@ FROM python:3.12-slim
 ARG APT_MIRROR
 LABEL org.opencontainers.image.title="hghub" \
       org.opencontainers.image.description="HGhub clone: web (8081) + playback proxy (8080)" \
-      org.opencontainers.image.source="https://github.com/huweiunique/hghub-clone"
+      org.opencontainers.image.source="https://github.com/huweiunique/xyz"
 
 # trixie 起源文件在 /etc/apt/sources.list.d/debian.sources（deb822 格式）
 RUN set -eux; \
