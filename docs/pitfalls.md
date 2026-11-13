@@ -31,6 +31,18 @@
 | 上游偶发断连 | 单个用例 ERROR | `http_get` 已内置一次重试；仍失败多为上游抖动 |
 | 补丁脚本 `--revert` 用跨行贪婪正则 | **整个文件被删** | 已改成逐行扫描；`BEGIN` 无 `END` 会直接拒绝执行 |
 
+## iOS 构建（GitHub Actions macOS）
+
+| 坑 | 现象 | 真相 |
+| --- | --- | --- |
+| `macos-14` 已退役（2026-11-02） | 任务 2 秒被 cancel、无日志 | 用 `macos-latest` / `macos-15` |
+| macOS runner 排队后被取消 | 排队 ~15 分钟后 `duration_ms: 0`、`runner_name: null` | GitHub 侧容量问题，重跑即可，与工作流无关 |
+| `CODE_SIGNING_ALLOWED=NO` + `archive` | `BUILD SUCCEEDED` 但**没有 `.xcarchive`** | 无签名时不走 archive 流程；改 `xcodebuild build` 后自己组装 `Payload/` |
+| iOS 26.5 SDK 拒绝 ad-hoc 签名 | `Ad Hoc code signing is not allowed with SDK 'iOS 26.5'` | 别用 `CODE_SIGN_IDENTITY="-"`，直接无签名 |
+| `xcodebuild ... \| tee \| tail` | 构建失败却继续往下跑 | 管道退出码来自 `tail`，改重定向 + 显式判错 |
+| AppIcon 只有 `Contents.json` | IPA 里没有 `Assets.car`，装上是白图标 | actool 无图片就不生成资源包；补 1024 png，脚本断言 `Assets.car` |
+| `NavigationStack` | `only available in iOS 16.0 or newer` | 部署目标提到 16 |
+
 ## 进程管理
 
 - `pkill python` 会误杀无关 Python（向量数据库等）。按端口杀：
