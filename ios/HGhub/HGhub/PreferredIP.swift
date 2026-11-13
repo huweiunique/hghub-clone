@@ -162,7 +162,9 @@ final class CFConnectProxy {
         }
 
         func pipe(_ source: NWConnection, to target: NWConnection) {
-            source.receive(minimumIncompleteLength: 1, maximumLength: 65536) { [weak self] data, _, done, error in
+            // Smaller bounded reads keep NWConnection flowing across a large write followed by
+            // TCP half-close; a single 64 KiB read can be reported as complete before queued tail bytes.
+            source.receive(minimumIncompleteLength: 1, maximumLength: 16384) { [weak self] data, _, done, error in
                 guard let self = self, !self.closed else { return }
                 guard error == nil else { self.close(); return }
                 // 先完成最后一块数据的发送，再单独发 FIN，保持数据和写关闭的顺序。
