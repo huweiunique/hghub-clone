@@ -20,22 +20,30 @@ git push origin v1.2.0.8
 不想打 tag 时也可以手动跑：Actions → 选工作流 → Run workflow，可填 `app_url` / `access_key`。
 手动跑的产物在 **Artifacts** 里，不进 Release。
 
-## 注入后端地址与密钥
+## 客户端里的「后端地址 + 访问密钥」
 
-两个 app 都需要知道后端在哪：
+**两个客户端都有这两项配置**，优先级：App 内设置 > 构建时内置 > 首次打开手填。
 
-- **APK**：`-PappUrl` / `APP_URL`，构建脚本写进 `BuildConfig.APP_URL`
-- **IPA**：`APP_URL` + `ACCESS_KEY`，构建脚本写进 `AppConfig.plist`
+| 客户端 | 设置入口 | 构建时注入 |
+| --- | --- | --- |
+| APK | 首次打开的设置页（地址 + 密钥），可清除后重填 | `APP_URL` / `APP_ACCESS_KEY`（Gradle：`-PappUrl` / `-PappAccessKey`） |
+| IPA | 右上角齿轮：地址、密钥、「测试连接」、恢复内置配置 | `APP_URL` / `ACCESS_KEY` → 写入 `AppConfig.plist` |
+
+密钥最终以 `?key=` 附加到入口 URL，后端据此下发 Cookie，之后请求自动带上。
 
 ```bash
-gh workflow run android-apk.yml -f app_url="http://<IP>:8081/"
-gh workflow run ios-ipa.yml -f app_url="http://<IP>:8081/" -f access_key="<KEY>"
+# 手动构建并注入（产物在 Actions → Artifacts）
+gh workflow run release.yml \
+  -f app_url="http://<IP>:8081/" \
+  -f access_key="<与服务端 HGHUB_ACCESS_KEY 相同的值>"
+
+# 本地构建
+APP_URL="http://<IP>:8081/" APP_ACCESS_KEY="<KEY>" bash android/build-apk-manual.sh
+APP_URL="http://<IP>:8081/" ACCESS_KEY="<KEY>" bash ios/build-ipa.sh
 ```
 
-留空时：APK 首次打开要求输入地址；IPA 有设置面板（右上角齿轮）输入地址和密钥。
-
-> 密钥会打进 app 包里。若在意，可以只填地址，让用户首次打开时手输密钥
-> （网页会弹「需要访问密钥」输入框，输入一次存 30 天 Cookie）。
+> 密钥会写进 app 包（dex / AppConfig.plist）。不想内置就留空，让用户首次打开手填；
+> 网页本身也会弹「需要访问密钥」输入框（存 30 天 Cookie）。
 
 ## iOS 未签名 IPA 怎么用
 
