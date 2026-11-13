@@ -93,6 +93,10 @@ plutil -p "$APP_PATH/AppConfig.plist"
   echo "[ios] 缺少设置入口脚本 app_settings.js，停止出包" >&2
   exit 1
 }
+[ -s "$APP_PATH/prefip_patch.js" ] || {
+  echo "[ios] 缺少优选设置脚本 prefip_patch.js，停止出包" >&2
+  exit 1
+}
 
 # 完整性断言：资源目录编译产物必须存在（AppIcon 缺图片时 actool 不会生成 Assets.car，
 # 装到手机上就是白图标；本仓库踩过）。缺了就 fail，别产出半个包。

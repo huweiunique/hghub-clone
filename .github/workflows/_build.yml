@@ -177,6 +177,11 @@ jobs:
       - name: Xcode 版本
         run: xcodebuild -version
 
+      - name: 验证优选 IP 本机连接通道
+        run: |
+          python3 tests/test_prefip_transport.py -v
+          python3 tests/test_prefip_ranking.py -v
+
       - name: 构建未签名 IPA
         env:
           APP_URL: ${{ inputs.app_url }}

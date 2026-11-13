@@ -6,6 +6,7 @@ struct ContentView: View {
     @State private var showSetup = false
     @State private var loadFailed = false
     @State private var immersivePlayback = false
+    @State private var preparingConnection = true
     // 地址/密钥变化后强制重建 WebView（否则 WKWebView 不会重新加载新地址）
     @State private var reloadToken = UUID()
 
@@ -16,6 +17,7 @@ struct ContentView: View {
                         hasKey: !settings.normalizedAccessKey.isEmpty,
                         onSettings: { showSetup = true },
                         onPlayerState: { immersivePlayback = $0 },
+                        onPrepared: { preparingConnection = false },
                         onLoadFailed: { loadFailed = true })
                     .id(reloadToken)
                     .ignoresSafeArea(edges: immersivePlayback ? .all : .bottom)
@@ -27,12 +29,17 @@ struct ContentView: View {
                         .buttonStyle(.borderedProminent)
                 }
             }
+            if preparingConnection && settings.entryURL != nil && !loadFailed {
+                ProgressView("正在准备连接…")
+                    .padding(24)
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+            }
             if loadFailed {
                 VStack(spacing: 16) {
                     Text("服务连接失败").font(.headline)
                     Button("配置后端地址与密钥") { showSetup = true }
                         .buttonStyle(.borderedProminent)
-                    Button("重试") { loadFailed = false; reloadToken = UUID() }
+                    Button("重试") { loadFailed = false; preparingConnection = true; reloadToken = UUID() }
                 }
                 .padding(24)
                 .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
@@ -43,6 +50,7 @@ struct ContentView: View {
             SetupView(settings: settings, isPresented: $showSetup) {
                 loadFailed = false
                 immersivePlayback = false
+                preparingConnection = true
                 reloadToken = UUID()
             }
         }
@@ -181,6 +189,7 @@ struct WebView: UIViewRepresentable {
     let hasKey: Bool
     let onSettings: () -> Void
     let onPlayerState: (Bool) -> Void
+    let onPrepared: () -> Void
     let onLoadFailed: () -> Void
 
     func makeUIView(context: Context) -> WKWebView {
@@ -191,6 +200,8 @@ struct WebView: UIViewRepresentable {
         config.preferences.javaScriptCanOpenWindowsAutomatically = true
         config.userContentController.add(context.coordinator, name: "hgSettings")
         config.userContentController.add(context.coordinator, name: "hgPlayer")
+        config.userContentController.addScriptMessageHandler(context.coordinator, contentWorld: .page,
+                                                              name: "hgPreferredIP")
         // 入口随 App 分发，原版服务无需部署 local_ext；只向同源主框架提供脱敏摘要。
         if let path = Bundle.main.path(forResource: "app_settings", ofType: "js"),
            let script = try? String(contentsOfFile: path, encoding: .utf8),
@@ -199,7 +210,9 @@ struct WebView: UIViewRepresentable {
             let summary: [String: Any] = ["address": address.string ?? "", "hasKey": hasKey]
             if let data = try? JSONSerialization.data(withJSONObject: summary),
                let json = String(data: data, encoding: .utf8) {
-                let injected = "if (location.origin === new URL((\(json)).address).origin) { window.HGAppConfig = \(json);\n\(script)\n}"
+                let preferredScript = Bundle.main.path(forResource: "prefip_patch", ofType: "js")
+                    .flatMap { try? String(contentsOfFile: $0, encoding: .utf8) } ?? ""
+                let injected = "if (location.origin === new URL((\(json)).address).origin) { window.HGAppConfig = \(json);\n\(script)\n\(preferredScript)\n}"
                 config.userContentController.addUserScript(WKUserScript(
                     source: injected, injectionTime: .atDocumentEnd, forMainFrameOnly: true))
             }
@@ -211,11 +224,16 @@ struct WebView: UIViewRepresentable {
         webView.scrollView.contentInsetAdjustmentBehavior = .never
         webView.isOpaque = false
         webView.backgroundColor = .black
-        webView.load(URLRequest(url: url))
+        context.coordinator.preferredIP.prepare(store: config.websiteDataStore) { [weak webView, weak coordinator = context.coordinator] in
+            coordinator?.initialLoadStarted = true
+            onPrepared()
+            webView?.load(URLRequest(url: url))
+        }
         return webView
     }
 
     func updateUIView(_ webView: WKWebView, context: Context) {
+        guard context.coordinator.initialLoadStarted else { return }
         // 地址变化时重新加载（设置面板保存后）
         if let current = webView.url?.absoluteString,
            current.hasPrefix(url.absoluteString.components(separatedBy: "?").first ?? "") {
@@ -231,21 +249,42 @@ struct WebView: UIViewRepresentable {
     static func dismantleUIView(_ uiView: WKWebView, coordinator: Coordinator) {
         uiView.configuration.userContentController.removeScriptMessageHandler(forName: "hgSettings")
         uiView.configuration.userContentController.removeScriptMessageHandler(forName: "hgPlayer")
+        uiView.configuration.userContentController.removeScriptMessageHandler(forName: "hgPreferredIP", contentWorld: .page)
+        coordinator.preferredIP.stop()
         uiView.navigationDelegate = nil
         uiView.stopLoading()
     }
 
-    final class Coordinator: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
+    @MainActor
+    final class Coordinator: NSObject, WKNavigationDelegate, WKScriptMessageHandler, WKScriptMessageHandlerWithReply {
         let url: URL
         let onSettings: () -> Void
         let onPlayerState: (Bool) -> Void
         let onLoadFailed: () -> Void
+        let preferredIP: PreferredIPController
+        var initialLoadStarted = false
 
         init(url: URL, onSettings: @escaping () -> Void, onPlayerState: @escaping (Bool) -> Void, onLoadFailed: @escaping () -> Void) {
             self.url = url
             self.onSettings = onSettings
             self.onPlayerState = onPlayerState
             self.onLoadFailed = onLoadFailed
+            self.preferredIP = PreferredIPController(url: url)
+        }
+
+        func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage,
+                                   replyHandler: @escaping (Any?, String?) -> Void) {
+            let origin = message.frameInfo.securityOrigin
+            guard message.name == "hgPreferredIP", message.frameInfo.isMainFrame,
+                  origin.protocol == url.scheme, origin.host == url.host,
+                  origin.port == (url.port ?? (url.scheme == "https" ? 443 : 80)),
+                  let body = message.body as? [String: Any] else {
+                replyHandler(nil, "不允许此页面访问优选配置"); return
+            }
+            Task {
+                do { replyHandler(try await preferredIP.handle(body), nil) }
+                catch { replyHandler(nil, error.localizedDescription) }
+            }
         }
 
         func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
@@ -259,11 +298,17 @@ struct WebView: UIViewRepresentable {
         }
 
         func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
-            if (error as NSError).code != NSURLErrorCancelled { onLoadFailed() }
+            recover(webView, error: error)
         }
 
         func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
-            if (error as NSError).code != NSURLErrorCancelled { onLoadFailed() }
+            recover(webView, error: error)
+        }
+
+        private func recover(_ webView: WKWebView, error: Error) {
+            guard (error as NSError).code != NSURLErrorCancelled else { return }
+            if preferredIP.fallbackAfterNavigationFailure() { webView.load(URLRequest(url: url)) }
+            else { onLoadFailed() }
         }
 
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {

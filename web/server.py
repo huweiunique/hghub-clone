@@ -280,6 +280,12 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/proxy/img":
             self._proxy_img((qs.get("url") or [""])[0])
             return
+        # ==== HGHUB_LOCAL_PATCH BEGIN (tools/apply_local_patches.py) ====
+        if path == "/api/prefip":
+            from local_ext import preferred_ip
+            preferred_ip.serve(self, qs)
+            return
+        # ==== HGHUB_LOCAL_PATCH END (tools/apply_local_patches.py) ====
         if path == "/api/prefip":
             isp = (qs.get("isp") or ["auto"])[0]
             all_lists = _prefip_all()

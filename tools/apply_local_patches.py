@@ -152,6 +152,19 @@ for _page in ("web/index.html", "android/app/src/main/assets/hghub/index.html"):
           'if (window.__hgResumeManaged) return; // 本地扩展使用媒体就绪事件恢复，避免旧定时器串集。\n',
           where="before-anchor-line", syntax="js")
 
+# CF 设置在业务脚本后加载；iOS 同时随包注入，可连接未部署扩展的旧后端。
+for _page in ("web/index.html", "android/app/src/main/assets/hghub/index.html"):
+    patch(_page, "preferred IP settings", "</body>",
+          '<script src="/local_ext/prefip_patch.js"></script>\n',
+          where="before-anchor-line")
+
+patch("web/server.py", "preferred IP refresh", 'if path == "/api/prefip":',
+      '''if path == "/api/prefip":
+    from local_ext import preferred_ip
+    preferred_ip.serve(self, qs)
+    return
+''', where="before-anchor-line")
+
 # 应用逻辑
 # ---------------------------------------------------------------------------
 BEGIN_RE = re.compile(r"^[ \t]*(?:#|/\*|<!--).*?"

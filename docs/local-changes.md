@@ -17,6 +17,8 @@ local_ext/
   web_patch.js      # 前端鉴权与布局修正：行内图标、App 顶栏、看全集自适应
   app_settings.js   # iOS 随包注入：“我的 → 设置”的地址与密钥配置入口
   player_patch.js   # 复用原播放器：沉浸布局、手动横竖切换、续播与历史增强
+  prefip_patch.js   # 优选设置与刷新反馈；iOS 原生连接桥
+  preferred_ip.py   # 优选列表按运营商缓存与显式刷新
 tools/
   apply_local_patches.py   # 幂等补丁脚本（apply / --check / --revert）
 ```
@@ -34,6 +36,8 @@ tools/
 | `android/.../assets/hghub/index.html` | 同上 | `</head>` 之前 |
 
 播放增强由补丁脚本在两个页面的 `</body>` 前引用 `player_patch.js`。
+优选设置同样在 `</body>` 前引用 `prefip_patch.js`，服务端通过受鉴权保护的
+`/api/prefip` 标记钩子进入本地扩展。iOS 连接能力和使用边界见 [CF 优选 IP](preferred-ip.md)。
 上游原有系统全屏按钮、视频控件、选集、倍速、播放线路及自动下一集继续保留。
 唯一的续播接缝是在上游旧续播判断前插入标记块：启用本地增强时跳过旧的固定延迟
 seek，避免切集后被旧定时器拖回错误时间；没有增强脚本时仍执行原逻辑。
