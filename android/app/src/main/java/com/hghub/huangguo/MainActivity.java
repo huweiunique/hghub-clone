@@ -128,21 +128,27 @@ public class MainActivity extends Activity {
             return url;
         }
         try {
-            // 不依赖 Uri.Builder.removeQueryParameter（API 29+），minSdk 24 兼容
-            android.net.Uri uri = android.net.Uri.parse(url);
-            android.net.Uri.Builder b = uri.buildUpon().encodedQuery(null);
-            String q = uri.getEncodedQuery();
-            if (q != null && !q.isEmpty()) {
-                for (String pair : q.split("&")) {
+            // 纯字符串拼接，不用 Uri.Builder 的新 API（append/removeQueryParameter
+            // 都是 API 29+，本工程 minSdk 24）。
+            int hash = url.indexOf('#');
+            String frag = hash >= 0 ? url.substring(hash) : "";
+            String base = hash >= 0 ? url.substring(0, hash) : url;
+            int qm = base.indexOf('?');
+            String path = qm >= 0 ? base.substring(0, qm) : base;
+            String query = qm >= 0 ? base.substring(qm + 1) : "";
+            StringBuilder sb = new StringBuilder();
+            if (!query.isEmpty()) {
+                for (String pair : query.split("&")) {
                     if (pair.isEmpty()) continue;
                     String k = android.net.Uri.decode(pair.split("=", 2)[0]);
                     if ("key".equals(k)) continue;
-                    b.appendEncodedQueryParameter(pair.split("=", 2)[0],
-                            pair.contains("=") ? pair.split("=", 2)[1] : "");
+                    if (sb.length() > 0) sb.append('&');
+                    sb.append(pair);
                 }
             }
-            b.appendQueryParameter("key", key);
-            return b.build().toString();
+            if (sb.length() > 0) sb.append('&');
+            sb.append("key=").append(android.net.Uri.encode(key));
+            return path + "?" + sb + frag;
         } catch (Exception e) {
             return url;
         }
