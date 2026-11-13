@@ -42,7 +42,7 @@ jobs:
       version: ${{ steps.v.outputs.version }}
       title: ${{ steps.v.outputs.title }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0          # 需要历史来生成提交清单
 
@@ -111,7 +111,7 @@ jobs:
           echo "--- 发布说明预览 ---"
           cat "$OUT"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: release-notes
           path: notes.md
@@ -121,8 +121,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "17"
@@ -147,7 +147,7 @@ jobs:
             || { echo "::error::build-apk-manual.sh 里 APP_ACCESS_KEY 必须为空"; exit 1; }
           mkdir -p dist && cp "$APK" dist/
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: apk
           path: dist/HGhub-*.apk
@@ -157,7 +157,7 @@ jobs:
     runs-on: macos-latest
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Xcode 版本
         run: xcodebuild -version
@@ -175,7 +175,7 @@ jobs:
           echo "$CFG" | grep -A1 '<key>AccessKey</key>' | grep -q '<string></string>' \
             || { echo "::error::AppConfig.plist 里 AccessKey 不为空"; exit 1; }
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: ipa-unsigned
           path: dist/HGhub-*.ipa
@@ -184,10 +184,14 @@ jobs:
     needs: [notes, apk, ipa]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/download-artifact@v4
+      # v4 并发下载 3 个 artifact 时偶发 "Artifact download failed after 5 retries"
+      # （三个其实都下载成功了，是它内部并发/重试的误判）。v5 + 串行下载更稳。
+      - uses: actions/download-artifact@v5
         with:
           path: dist
           merge-multiple: true
+          # 一次下 3 个，串行避免并发问题
+          max-parallel: 1
 
       - name: 发布到 GitHub Release
         uses: softprops/action-gh-release@v2
@@ -223,7 +227,7 @@ jobs:
             echo "::notice::未配置 DOCKERHUB_USERNAME / DOCKERHUB_TOKEN，跳过镜像推送"
           fi
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         if: steps.gate.outputs.enabled == 'true'
 
       - name: 设置 Buildx
