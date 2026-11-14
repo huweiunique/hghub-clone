@@ -18,6 +18,8 @@ from shot import WS, find_chrome, free_port
 class BrowserFixture(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        if os.environ.get('HGHUB_UI_TESTS') != '1':
+            raise unittest.SkipTest("未启用浏览器 UI 自动测试；使用 python tests/run_all.py --ui")
         try:
             chrome = find_chrome()
         except SystemExit:

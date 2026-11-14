@@ -16,7 +16,8 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: 静态 + 离线功能测试
+      # 浏览器 UI 自动测试由本地 --ui 显式启用，不作为后端 CI 门槛。
+      - name: 静态 + 后端离线功能测试（不含浏览器 UI）
         run: python tests/run_all.py
 
       - name: 补丁状态检查

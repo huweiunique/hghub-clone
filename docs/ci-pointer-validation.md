@@ -1,5 +1,11 @@
 # Linux CI 指针模拟修复验证
 
+## 当前状态
+
+`0cfa91f` 的 [Backend tests](https://github.com/huweiunique/xyz/actions/runs/43563532416) 仍失败：同一导航用例的两次桌面状态断言未通过。下面的本地通过记录仅覆盖 Windows，不能视为 Linux 修复成功。Chromium 在关闭触屏模拟时会恢复宿主输入能力，覆盖启动时的 Blink 设置。
+
+现将浏览器自动测试改为 `--ui` 显式启用，默认后端检查不启动浏览器；这是测试范围调整，未修复原指针模拟问题，也未改变业务界面。运行方式见 [测试说明](testing.md)。
+
 ## 问题与修复
 
 提交 `06392003de4bc25093bf965bf2c770b407520499` 的 [Backend tests 第 2 次尝试](https://github.com/huweiunique/xyz/actions/runs/43558928226/attempts/2) 在离线测试阶段失败：`test_desktop_navigation_stays_visible_while_video_controls_hide` 返回 `desktop=False`、导航隐藏。后续 Docker 构建步骤没有执行。
