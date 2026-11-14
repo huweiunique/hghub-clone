@@ -45,13 +45,16 @@
     document.body.classList.remove('hg-ui-hidden');
     clearTimeout(hideTimer);
     if (immersive && !video.paused) hideTimer = setTimeout(function () {
+      if (video.paused || video.seeking || interacting) { reveal(); return; }
       var focused = document.activeElement;
-      if (pane.querySelector('.hg-choice') || pane.querySelector('#hgHoldHint:not([hidden])')) return;
+      if (pane.querySelector('.hg-choice,details[open]') || pane.querySelector('#hgHoldHint:not([hidden])')) { reveal(); return; }
       if (pane.contains(focused) && focused !== video &&
-          (focused.tagName === 'SELECT' || focused.matches(':focus-visible'))) return;
+          (focused.tagName === 'SELECT' || focused.matches(':focus-visible'))) { reveal(); return; }
       document.body.classList.add('hg-ui-hidden');
-    }, 3000);
+    }, 4000);
   }
+  var interacting = false;
+  function finishInteraction() { if (!interacting) return; interacting = false; reveal(); }
   function syncPlayer() {
     var visible = !player.hidden && !pane.hidden;
     if (visible === immersive) return;
@@ -59,7 +62,7 @@
     document.body.classList.toggle('hg-immersive', visible);
     if (!visible) {
       document.body.classList.remove('hg-landscape', 'hg-ui-hidden');
-      rotate.textContent = '切换横屏';
+      updateRotation(false);
       rotate.setAttribute('aria-pressed', 'false');
       clearTimeout(hideTimer);
     } else reveal();
@@ -70,15 +73,28 @@
   rotate.onclick = function () {
     var landscape = document.body.classList.toggle('hg-landscape');
     stageSize();
-    rotate.textContent = landscape ? '切回竖屏' : '切换横屏';
+    updateRotation(landscape);
     rotate.setAttribute('aria-pressed', String(landscape));
     reveal();
   };
-  pane.addEventListener('pointerdown', reveal);
+  function updateRotation(landscape) {
+    var label = landscape ? '切回竖屏' : '切换横屏';
+    rotate.setAttribute('aria-label',label); rotate.title = label;
+    if (rotate.dataset.hgIcon) rotate.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M7 10h10M13 8l4 2-4 2"/></svg>';
+    else rotate.textContent = label;
+  }
+  rotate.addEventListener('hg-icon-ready',function(){updateRotation(document.body.classList.contains('hg-landscape'));});
+  pane.addEventListener('pointerdown', function () { interacting = true; reveal(); });
+  window.addEventListener('pointerup', finishInteraction);
+  window.addEventListener('pointercancel', finishInteraction);
+  window.addEventListener('blur', finishInteraction);
+  pane.addEventListener('pointermove', function (e) { if(e.pointerType === 'mouse') reveal(); });
   pane.addEventListener('focusin', reveal);
   pane.addEventListener('focusout', reveal);
   video.addEventListener('play', reveal);
   video.addEventListener('pause', reveal);
+  video.addEventListener('seeking', reveal);
+  video.addEventListener('seeked', reveal);
   window.addEventListener('resize', stageSize); // 只调整尺寸，不根据设备旋转切换方向。
   new MutationObserver(syncPlayer).observe(player, { attributes: true, subtree: true, attributeFilter: ['hidden'] });
   stageSize();

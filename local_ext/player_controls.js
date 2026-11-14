@@ -139,7 +139,11 @@
   shield.addEventListener('click', function (event) { event.stopPropagation(); });
   function update() {
     play.textContent = video.paused ? '播放' : '暂停'; play.setAttribute('aria-label', play.textContent);
-    mute.textContent = video.muted ? '开启声音' : '静音'; mute.setAttribute('aria-pressed', String(video.muted));
+    var muteLabel = video.muted ? '开启声音' : '静音';
+    mute.setAttribute('aria-label', muteLabel); mute.title = muteLabel;
+    if (mute.dataset.hgIcon) mute.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4z"/>' + (video.muted ? '<path d="m16 9 5 6m0-6-5 6"/>' : '<path d="M15 8a6 6 0 0 1 0 8m3-11a10 10 0 0 1 0 14"/>') + '</svg>';
+    else mute.textContent = muteLabel;
+    mute.setAttribute('aria-pressed', String(video.muted));
     seek.disabled = !isFinite(video.duration) || video.duration <= 0;
     if (!scrubbing) { seek.value = seek.disabled ? 0 : video.currentTime / video.duration * 1000; clock.textContent = format(video.currentTime) + ' / ' + format(video.duration); }
   }

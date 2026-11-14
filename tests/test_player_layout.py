@@ -87,7 +87,16 @@ class BrowserFixture(unittest.TestCase):
             cls.ws.send({"id": 99999, "method": "Browser.close"})
         except (OSError, AttributeError):
             cls.proc.terminate()
-        cls.proc.wait(timeout=10)
+        try:
+            cls.proc.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            # 仅终止本测试创建的浏览器进程树，不能误关用户的 Chrome。
+            if sys.platform == 'win32':
+                subprocess.run(['taskkill', '/PID', str(cls.proc.pid), '/T', '/F'],
+                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+            else:
+                cls.proc.kill()
+            cls.proc.wait(timeout=10)
         if hasattr(cls, 'ws'):
             cls.ws.sock.close()
         cls.browser_log.close()
@@ -178,7 +187,7 @@ class PlayerLayoutTests(BrowserFixture):
         self.evaluate("document.querySelector('#video').dispatchEvent(new Event('play'))")
         self.assertFalse(self.evaluate("document.querySelector('#video').controls"))
         hidden = self.evaluate("""(async()=>{
-          await new Promise(r=>setTimeout(r,3200));
+          await new Promise(r=>setTimeout(r,4200));
           return getComputedStyle(document.querySelector('#btnBackDetail')).visibility;
         })()""")
         self.assertEqual(hidden, 'hidden')

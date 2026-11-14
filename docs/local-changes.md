@@ -131,3 +131,7 @@ python tools/apply_local_patches.py --check
 镜像构建时会检查：`web/server.py` 有补丁标记、`index.html` 引用了 `web_patch.js`、
 `local_ext.access_key` 能 import。缺任何一项直接构建失败 —— 避免出现「代码更新了但补丁没打」
 却照样上线的镜像。
+
+## 沉浸首页与紧凑播放操作
+
+首页全屏净看、底部搜索、紧凑操作栏与系统画中画入口见 [沉浸观看设计及验证边界](immersive-viewing.md)。实现位于 `local_ext/viewing_ui.js`，通过补丁脚本接入；该设计替代此前将全集全部操作按钮平铺的布局，保留既有增强、恢复和历史能力。

@@ -154,6 +154,9 @@ for _page in ("web/index.html", "android/app/src/main/assets/hghub/index.html"):
     patch(_page, "GPU video enhancement", "</body>",
           '<script src="/local_ext/video_enhance.js"></script>\n',
           where="before-anchor-line")
+    patch(_page, "immersive viewing UI", "</body>",
+          '<script src="/local_ext/viewing_ui.js"></script>\n',
+          where="before-anchor-line")
     patch(_page, "bounded player recovery", '    if (data && data.fatal && !tried){',
           'if (window.hgRecoverHls && window.hgRecoverHls(hls, data, tried)) return;\n',
           where="before-anchor-line", syntax="js")
