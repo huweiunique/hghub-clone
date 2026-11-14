@@ -31,8 +31,6 @@ class ViewingUITests(BrowserFixture):
         self.evaluate("document.querySelector('#hgMore').open=false")
 
     def test_home_is_full_height_and_revealing_does_not_resize_video(self):
-        self.ws.call('Emulation.setEmulatedMedia',{'features':[{'name':'hover','value':'none'},{'name':'pointer','value':'coarse'}]})
-        self.addCleanup(lambda:self.ws.call('Emulation.setEmulatedMedia',{'features':[]}))
         self.ws.call('Emulation.setDeviceMetricsOverride',dict(width=390,height=844,deviceScaleFactor=1,mobile=True))
         self.ws.call('Emulation.setTouchEmulationEnabled',{'enabled':True})
         self.addCleanup(lambda:self.ws.call('Emulation.setTouchEmulationEnabled',{'enabled':False}))
@@ -176,14 +174,19 @@ class ViewingDataBoundaryTests(BrowserFixture):
         self.assertEqual(result,dict(pauseVisible=True,dragVisible=True,hidden=True,fit='contain'))
 
     def test_desktop_navigation_stays_visible_while_video_controls_hide(self):
-        self.ws.call('Emulation.setEmulatedMedia',{'features':[{'name':'hover','value':'hover'},{'name':'pointer','value':'fine'}]})
         try:
-            result=self.evaluate("""(()=>{document.body.dataset.view='home';HGViewing.clean(true);return {
-              desktop:matchMedia('(hover:hover) and (pointer:fine)').matches,
-              nav:getComputedStyle(document.querySelector('#bottomNav')).visibility,
-              actions:getComputedStyle(document.querySelector('#feed .acts')).visibility};})()""")
-            self.assertTrue(result['desktop'],result)
-            self.assertEqual(result['nav'],'visible',result)
-            self.assertEqual(result['actions'],'hidden',result)
+            # 同一浏览器验证桌面、触屏、恢复桌面，防止只在开发机上碰巧通过。
+            for touch in (False, True, False):
+                with self.subTest(touch=touch):
+                    self.ws.call('Emulation.setTouchEmulationEnabled',{'enabled':touch})
+                    result=self.evaluate("""(()=>{document.body.dataset.view='home';HGViewing.clean(true);return {
+                      desktop:matchMedia('(hover:hover) and (pointer:fine)').matches,
+                      touch:matchMedia('(hover:none) and (pointer:coarse)').matches,
+                      nav:getComputedStyle(document.querySelector('#bottomNav')).visibility,
+                      actions:getComputedStyle(document.querySelector('#feed .acts')).visibility};})()""")
+                    self.assertEqual(result['desktop'],not touch,result)
+                    self.assertEqual(result['touch'],touch,result)
+                    self.assertEqual(result['nav'],'hidden' if touch else 'visible',result)
+                    self.assertEqual(result['actions'],'hidden',result)
         finally:
-            self.ws.call('Emulation.setEmulatedMedia',{'features':[]})
+            self.ws.call('Emulation.setTouchEmulationEnabled',{'enabled':False})

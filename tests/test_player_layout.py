@@ -29,6 +29,9 @@ class BrowserFixture(unittest.TestCase):
         args = [
             chrome, "--headless=new", "--disable-gpu", "--no-first-run",
             "--no-default-browser-check", "--autoplay-policy=no-user-gesture-required",
+            # Linux 无头 runner 未必有鼠标。固定桌面输入能力，触屏用例另用
+            # setTouchEmulationEnabled 覆盖；setEmulatedMedia 不支持 hover/pointer。
+            "--blink-settings=availablePointerTypes=4,primaryPointerType=4,availableHoverTypes=2,primaryHoverType=2",
             f"--remote-debugging-port={port}", f"--user-data-dir={cls.profile.name}",
             "about:blank",
         ]

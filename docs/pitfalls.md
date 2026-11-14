@@ -29,6 +29,7 @@
 | `tempfile.TemporaryDirectory` | Windows 沙箱下 PermissionError | 写到仓库内 `.test-tmp/` |
 | 系统临时目录 / 管道 | Git Bash `bash -n` 直接 fatal | MSYS 创建命名管道被拒；用 Python/文档自检替代 |
 | 上游偶发断连 | 单个用例 ERROR | `http_get` 已内置一次重试；仍失败多为上游抖动 |
+| Linux 无头浏览器没有鼠标能力 | 桌面导航测试返回 `desktop=False`，离线测试失败导致 Docker 构建未执行 | `Emulation.setEmulatedMedia` 不覆盖 `hover/pointer`。测试浏览器通过 `--blink-settings` 明确设置 fine pointer 与 hover，触屏用例使用 `Emulation.setTouchEmulationEnabled`，并断言桌面、触屏及恢复桌面时的真实媒体查询和导航显隐；不能跳过断言或修改业务 CSS 来放行 |
 | 补丁脚本 `--revert` 用跨行贪婪正则 | **整个文件被删** | 已改成逐行扫描；`BEGIN` 无 `END` 会直接拒绝执行 |
 
 ## iOS 构建（GitHub Actions macOS）
