@@ -1,5 +1,13 @@
 # 发版：APK / IPA / Docker
 
+## Nightly 附件保留规则
+
+Nightly Release 仅保留最近一次成功发布的 APK 与未签名 IPA。发布流程先核对本次两个
+安装包已完整上传，再清理该 Nightly 的其它上传附件；构建或上传失败时保留此前可用安装包。
+正式版不执行此清理。成功上传后同时将 Nightly 标签向前同步到本次提交，避免源码链接仍指旧版。
+GitHub 自动生成的 Source code (zip / tar.gz) 属于标签源码下载链接，
+不属于上传附件，不能通过 Release 附件删除接口单独移除。
+
 ## 打一个 tag 就全自动
 
 ```bash

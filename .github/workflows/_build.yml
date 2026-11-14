@@ -232,6 +232,7 @@ jobs:
           path: dist
 
       - name: 发布到 GitHub Release
+        id: release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.notes.outputs.version }}
@@ -242,6 +243,39 @@ jobs:
           files: |
             dist/HGhub-*.apk
             dist/HGhub-*.ipa
+
+      # 先确认本次两个安装包都已完整上传，再删除旧附件；构建或上传失败时保留旧包。
+      - name: Nightly 仅保留本次安装包
+        if: inputs.channel == 'nightly'
+        uses: actions/github-script@v7
+        env:
+          RELEASE_ID: ${{ steps.release.outputs.id }}
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+            const names = fs.readdirSync('dist').filter(name => /^HGhub-.*\.(apk|ipa)$/.test(name));
+            if (names.filter(name => name.endsWith('.apk')).length !== 1 ||
+                names.filter(name => name.endsWith('.ipa')).length !== 1) {
+              throw new Error('本次 APK / IPA 不完整，拒绝清理旧附件');
+            }
+            const release_id = Number(process.env.RELEASE_ID);
+            if (!Number.isSafeInteger(release_id) || release_id <= 0) throw new Error('发布记录无效');
+            const params = { ...context.repo, release_id };
+            const assets = await github.paginate(github.rest.repos.listReleaseAssets, params);
+            for (const name of names) {
+              const asset = assets.find(asset => asset.name === name);
+              if (!asset || asset.state !== 'uploaded' || asset.size !== fs.statSync(path.join('dist', name)).size) {
+                throw new Error('本次附件未完整上传，拒绝清理：' + name);
+              }
+            }
+            // 同步自动源码链接；只允许向前更新，防止重跑旧构建将标签退回旧版本。
+            await github.rest.git.updateRef({ ...context.repo, ref: 'tags/nightly', sha: context.sha, force: false });
+            for (const asset of assets) {
+              if (names.includes(asset.name)) continue;
+              await github.rest.repos.deleteReleaseAsset({ ...context.repo, asset_id: asset.id });
+              core.info('已删除旧 Nightly 附件：' + asset.name);
+            }
 
   # ----------------------------------------------------------- Docker 镜像
   # 需要仓库 Secrets：DOCKERHUB_USERNAME、DOCKERHUB_TOKEN（Access Token，不是密码）
