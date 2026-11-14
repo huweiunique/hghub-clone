@@ -48,6 +48,21 @@ class ViewingUITests(BrowserFixture):
         })()""")
         self.assertEqual(result,dict(h=844,after=844,hidden='hidden',shown='visible',search=True,calls=0))
 
+    def test_real_update_banner_never_reserves_home_height(self):
+        result=self.evaluate("""(()=>{
+          const banner=document.querySelector('#newBanner');banner.textContent='有 5 部新更新，点击查看';banner.hidden=false;
+          document.body.dataset.view='home';HGViewing.clean(true);
+          const top=feed.getBoundingClientRect().top,height=feed.clientHeight,hidden=getComputedStyle(banner).visibility;
+          HGViewing.reveal();
+          const result={top,height,hidden,afterTop:feed.getBoundingClientRect().top,afterHeight:feed.clientHeight,shown:getComputedStyle(banner).visibility};
+          banner.hidden=true;return result;
+        })()""")
+        self.assertEqual(result['top'],0,result)
+        self.assertEqual(result['afterTop'],0,result)
+        self.assertEqual(result['height'],result['afterHeight'],result)
+        self.assertEqual(result['hidden'],'hidden',result)
+        self.assertEqual(result['shown'],'visible',result)
+
     def test_pip_uses_system_api_and_reports_failure(self):
         result=self.evaluate("""(async()=>{
           let calls=0;window.toast=t=>window.pipMessage=t;

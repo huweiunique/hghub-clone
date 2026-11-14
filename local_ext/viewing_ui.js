@@ -12,6 +12,11 @@
     body[data-view=home] main{padding:0;max-width:none;margin:0}
     body[data-view=home] #view-home{height:100vh;height:100dvh}
     body[data-view=home] #feed{background:#000}
+    body[data-view=home] #feed{scrollbar-width:none}
+    body[data-view=home] #feed::-webkit-scrollbar{display:none}
+    body[data-view=home] #view-home{position:relative}
+    body[data-view=home] #newBanner{position:absolute;top:var(--hg-screen-top,24px);left:50%;transform:translateX(-50%);margin:0;width:max-content;max-width:calc(100% - 140px);font-size:12px;overflow-wrap:anywhere}
+    body[data-view=home].hg-feed-clean #newBanner{visibility:hidden;pointer-events:none}
     body[data-view=home] .slide video.bgvid,body[data-view=home] .slide img.cover{object-fit:contain}
     body[data-view=home] .bottomnav{background:#0e0e11ed}
     body[data-view=home] .slide .info{bottom:calc(var(--hg-nav-height,64px) + 4px);max-height:45%;overflow:auto}
