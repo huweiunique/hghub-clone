@@ -106,6 +106,12 @@ struct SetupView: View {
                         Button("恢复内置地址") { draftURL = settings.builtInURL }
                     }
                 }
+                Section("版本") {
+                    Text(AppSettings.versionDescription)
+                        .font(.footnote)
+                        .textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
             .disabled(testing)
             .navigationTitle("设置")
@@ -208,6 +214,7 @@ struct WebView: UIViewRepresentable {
            var address = URLComponents(url: url, resolvingAgainstBaseURL: false) {
             address.queryItems = address.queryItems?.filter { $0.name != "key" }
             let summary: [String: Any] = ["address": address.string ?? "", "hasKey": hasKey,
+                                         "versionDescription": AppSettings.versionDescription,
                                          "preferredIPSupported": context.coordinator.preferredIP.supported]
             if let data = try? JSONSerialization.data(withJSONObject: summary),
                let json = String(data: data, encoding: .utf8) {

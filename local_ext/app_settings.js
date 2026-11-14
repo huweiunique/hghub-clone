@@ -70,6 +70,13 @@
       note.className = 'hint';
       note.textContent = '下方两种播放方式共用此后端，无需配置其他服务器地址。密钥仅用于后端鉴权，不会发送给视频 CDN。';
       section.append(title, address, key, note, openButton());
+      if (config.versionDescription) {
+        var version = document.createElement('p');
+        version.className = 'hint';
+        version.setAttribute('data-hg-app-version', '');
+        version.textContent = '版本：' + config.versionDescription;
+        section.appendChild(version);
+      }
       settings.insertBefore(section, settings.querySelector('#__hg_playback_fallback'));
     }
     mount();

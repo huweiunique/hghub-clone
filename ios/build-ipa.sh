@@ -88,6 +88,8 @@ file "$APP_PATH/HGhub" || true
 
 # AppConfig.plist 必须在 Bundle 里，AppSettings 才能读到
 cp "$PROJ_DIR/HGhub/AppConfig.plist" "$APP_PATH/AppConfig.plist"
+python3 "$ROOT/tools/stamp_ios_build.py" "$APP_PATH" \
+  --channel "${BUILD_CHANNEL:-stable}" --artifact-suffix="$SUFFIX"
 plutil -p "$APP_PATH/AppConfig.plist"
 [ -s "$APP_PATH/app_settings.js" ] || {
   echo "[ios] 缺少设置入口脚本 app_settings.js，停止出包" >&2

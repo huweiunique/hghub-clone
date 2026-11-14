@@ -190,16 +190,32 @@ jobs:
       - name: 构建未签名 IPA
         env:
           APP_URL: ${{ inputs.app_url }}
+          BUILD_CHANNEL: ${{ inputs.channel }}
           ARTIFACT_SUFFIX: ${{ needs.notes.outputs.suffix }}
         run: bash ios/build-ipa.sh
 
       - name: 检查 IPA 结构（并确认没有内置密钥）
+        env:
+          BUILD_CHANNEL: ${{ inputs.channel }}
+          ARTIFACT_SUFFIX: ${{ needs.notes.outputs.suffix }}
         run: |
           unzip -l dist/HGhub-*.ipa | head -15
           CFG=$(unzip -p dist/HGhub-*.ipa "Payload/HGhub.app/AppConfig.plist")
           echo "$CFG" | plutil -p -
           echo "$CFG" | grep -A1 '<key>AccessKey</key>' | grep -q '<string></string>' \
             || { echo "::error::AppConfig.plist 里 AccessKey 不为空"; exit 1; }
+          python3 - <<'PY'
+          import glob, os, plistlib, zipfile
+          with zipfile.ZipFile(glob.glob('dist/HGhub-*.ipa')[0]) as ipa:
+              info = plistlib.loads(ipa.read('Payload/HGhub.app/Info.plist'))
+          expected = info['CFBundleShortVersionString']
+          if os.environ['BUILD_CHANNEL'] == 'nightly':
+              date, commit = os.environ['ARTIFACT_SUFFIX'].removeprefix('-nightly-').split('-')
+              expected += '-N' + date[2:] + '-' + commit[:7]
+          assert info['HGVersionDescription'] == expected, 'IPA 构建标识不匹配'
+          assert info['CFBundleGetInfoString'] == expected, 'IPA 可读版本不匹配'
+          print('已核对 IPA 版本：' + expected)
+          PY
 
       - uses: actions/upload-artifact@v5
         with:

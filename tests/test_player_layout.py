@@ -189,7 +189,7 @@ class PlayerLayoutTests(BrowserFixture):
         script = (ROOT / 'local_ext/app_settings.js').read_text(encoding='utf-8')
         original = self.evaluate("document.querySelector('#meBox').innerHTML")
         self.evaluate("""
-          window.HGAppConfig={address:'https://example.test/'+'a'.repeat(140)+'?x=<img>',hasKey:true};
+          window.HGAppConfig={address:'https://example.test/'+'a'.repeat(140)+'?x=<img>',hasKey:true,versionDescription:'1.2.0.8-N261113-9478076'};
           window.__settingsMessages=[];
           window.webkit={messageHandlers:{hgSettings:{postMessage:m=>window.__settingsMessages.push(m)}}};
           document.querySelector('#meBox').innerHTML='<div class="mebox"><h3>设置</h3><label>播放线路</label><select id="lineSel"><option value="direct">直连 CDN</option><option value="proxy" selected>8080 代理</option></select></div>';
@@ -221,6 +221,7 @@ class PlayerLayoutTests(BrowserFixture):
                 self.assertTrue(result['configFirst'], result)
                 self.assertTrue(result['inside'], result)
                 self.assertEqual(result['messages'][-1], 'open', result)
+                self.assertIn('版本：1.2.0.8-N261113-9478076', result['text'])
                 self.assertIn('已配置' if has_key else '未配置（可选）', result['text'])
             self.evaluate("document.querySelector('#lineSel').value='direct'; document.querySelector('#lineSel').dispatchEvent(new Event('change'))")
             self.assertIn('直连 CDN', self.evaluate("document.querySelector('#__hg_playback_fallback summary').textContent"))

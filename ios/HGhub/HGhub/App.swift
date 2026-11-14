@@ -16,6 +16,14 @@ struct HGhubApp: App {
 /// 地址可以由构建时注入（AppConfig.plist 的 AppURL）；**密钥一律不内置**，
 /// 首次打开由用户输入并保存在本机（UserDefaults），避免分发包里带密钥。
 final class AppSettings: ObservableObject {
+    /// 读取随安装包固定的版本信息，不受远程网页更新影响。
+    static let versionDescription: String = {
+        let info = Bundle.main.infoDictionary ?? [:]
+        return info["HGVersionDescription"] as? String
+            ?? info["CFBundleShortVersionString"] as? String
+            ?? "未知版本"
+    }()
+
     private let defaults = UserDefaults.standard
 
     /// 构建时内置的地址（只读，给设置面板展示）；密钥永远为空
